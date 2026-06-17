@@ -220,7 +220,7 @@ function RepertoireTab() {
   const [morceaux, setMorceaux] = useState([]);
   const [fichiers, setFichiers] = useState([]);
   const [taches, setTaches] = useState([]);
-  const [membres, setMembres] = useState([]);
+  const [, setMembres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(null);
   const [openPiste, setOpenPiste] = useState(null);
