@@ -1,0 +1,15 @@
+{
+  "short_name": "Échos",
+  "name": "Les Échos d'Occitanie",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1C2B1A",
+  "theme_color": "#1C2B1A",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
