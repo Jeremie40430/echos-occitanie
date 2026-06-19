@@ -883,13 +883,14 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
 
   if(!actif) return (
     <>
-      <DossierGrid
-        dossiers={dossiers.map(d=>({...d,count:fichiers.filter(f=>f.dossier_id===d.id).length,countLabel:"fichier(s)"}))}
-        onOpen={setActif} isAdmin={isAdmin}
-        onEdit={d=>setModal({t:"dossier",data:d})}
-        onDelete={d=>setConfirm({id:d.id,t:"dossier",msg:`Supprimer "${d.nom}" ?`})}
-      />
-      }
+      {loading ? <Spinner/> : (
+        <DossierGrid
+          dossiers={dossiers.map(d=>({...d,count:fichiers.filter(f=>(f.morceau_id||f.dossier_id)===d.id).length,countLabel:"fichier(s)"}))}
+          onOpen={setActif} isAdmin={isAdmin}
+          onEdit={d=>setModal({t:"dossier",data:d})}
+          onDelete={d=>setConfirm({id:d.id,t:"dossier",msg:`Supprimer "${d.nom}" ?`})}
+        />
+      )}
       {isAdmin && <BtnPlus onClick={()=>setModal({t:"choix"})}/>}
       {modal?.t==="choix" && (
         <Modal title="Ajouter…" onClose={()=>setModal(null)}>
@@ -908,7 +909,7 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
     </>
   );
 
-  const contenu = fichiers.filter(f=>(f.dossier_id||f.morceau_id)===actif.id);
+  const contenu = fichiers.filter(f=>(f.morceau_id||f.dossier_id)===actif.id);
   return (
     <>
       <Breadcrumb items={[`${actif.emoji} ${actif.nom}`]} onBack={()=>setActif(null)}/>
@@ -1005,7 +1006,11 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
 
   // Niveau 1
   if(loading) return <Spinner/>;
-  if(!actif) return <DossierGrid dossiers={dossiers.map(d=>({...d,count:(d.sousDossiers||[]).length,countLabel:"séance(s)"}))} onOpen={setActif} isAdmin={false}/>;
+  if(!actif) return (
+    <>
+      <DossierGrid dossiers={dossiers.map(d=>({...d,count:(d.sousDossiers||[]).length,countLabel:"séance(s)"}))} onOpen={setActif} isAdmin={false}/>
+    </>
+  );;
 
   const dData = dossiers.find(x=>x.id===actif.id);
 
