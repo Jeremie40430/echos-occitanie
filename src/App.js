@@ -7,6 +7,8 @@ const supabase = createClient(
   "sb_publishable_pN30Nd2M-cNVneBT7zKuXg_4hpcJge2"
 );
 
+const SUPABASE_URL = "https://sxhaapcnzbrlornlkxft.supabase.co";
+
 const C = {
   primary:"#1A1F6E", secondary:"#C8102E",
   parchemin:"#F5F0E8", grisChaud:"#8B7355",
@@ -93,24 +95,136 @@ const AA = ({onEdit,onDelete}) => (
   </div>
 );
 
-// Cards universelles
-const AudioCard = ({nom,taille,favori,playing,onPlay,onFavori,onEdit,onDelete,isAdmin,bColor,bIcon}) => (
-  <div style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
-    <button onClick={onPlay} style={{width:40,height:40,borderRadius:"50%",border:"none",cursor:"pointer",background:bColor||C.secondary,color:"#fff",fontSize:16,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,boxShadow:`0 2px 8px ${(bColor||C.secondary)}50`}}>
-      {playing?"⏸":(bIcon||"▶")}
-    </button>
-    <div style={{flex:1,minWidth:0}}>
-      <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{nom}</div>
-      <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{taille}</div>
-      {playing&&<div style={{marginTop:6,height:3,background:"#D4C9B0",borderRadius:2}}><div style={{width:"40%",height:"100%",background:bColor||C.secondary,borderRadius:2}}/></div>}
-    </div>
-    {isAdmin&&(
-      <div style={{display:"flex",gap:4,flexShrink:0}}>
-        {onFavori!==undefined&&<button onClick={e=>{e.stopPropagation();onFavori();}} style={{background:favori?"#FDF3E3":"#F5F5F5",border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:14}}>{favori?"⭐":"☆"}</button>}
-        <button onClick={e=>{e.stopPropagation();onEdit();}} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:13}}>✏️</button>
-        <button onClick={e=>{e.stopPropagation();onDelete();}} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:13}}>🗑</button>
+// ── Upload fichier ────────────────────────────────────────────────
+function FileUpload({onUploaded,accept,label}) {
+  const [uploading,setUploading] = useState(false);
+  const [progress,setProgress] = useState(0);
+  const inputRef = useRef();
+
+  const upload = async(e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    setUploading(true);
+    setProgress(10);
+    const ext = file.name.split(".").pop();
+    const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    setProgress(40);
+    const { error } = await supabase.storage.from("media").upload(path, file, { upsert: false });
+    setProgress(80);
+    if(error) { alert("Erreur upload : " + error.message); setUploading(false); return; }
+    const { data } = supabase.storage.from("media").getPublicUrl(path);
+    setProgress(100);
+    setTimeout(()=>{setUploading(false);setProgress(0);},500);
+    const taille = file.size > 1024*1024
+      ? `${(file.size/1024/1024).toFixed(1)} Mo`
+      : `${Math.round(file.size/1024)} Ko`;
+    onUploaded({ url: data.publicUrl, nom: file.name.replace(`.${ext}`,""), taille, ext });
+  };
+
+  return (
+    <div style={{marginBottom:10}}>
+      <div style={{fontSize:11,fontWeight:600,color:C.grisChaud,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:4}}>{label||"Fichier"}</div>
+      <div
+        onClick={()=>!uploading&&inputRef.current.click()}
+        style={{border:"2px dashed #D4C9B0",borderRadius:10,padding:"16px",textAlign:"center",cursor:uploading?"default":"pointer",background:uploading?"#F5F0E8":C.blanc}}
+      >
+        {uploading ? (
+          <div>
+            <div style={{fontSize:13,color:C.primary,marginBottom:8}}>Upload en cours…</div>
+            <div style={{height:4,background:"#D4C9B0",borderRadius:2}}>
+              <div style={{height:"100%",width:`${progress}%`,background:C.secondary,borderRadius:2,transition:"width 0.3s"}}/>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{fontSize:28,marginBottom:6}}>📁</div>
+            <div style={{fontSize:13,color:C.primary,fontWeight:600}}>Appuyer pour choisir un fichier</div>
+            <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>MP3, PDF, WAV, M4A…</div>
+          </div>
+        )}
       </div>
-    )}
+      <input ref={inputRef} type="file" accept={accept||"audio/*,application/pdf"} style={{display:"none"}} onChange={upload}/>
+    </div>
+  );
+}
+
+// ── Lecteur audio ─────────────────────────────────────────────────
+function AudioPlayer({url,nom,bColor}) {
+  const audioRef = useRef();
+  const [playing,setPlaying] = useState(false);
+  const [progress,setProgress] = useState(0);
+  const [duration,setDuration] = useState(0);
+  const [current,setCurrent] = useState(0);
+
+  const toggle = () => {
+    if(!audioRef.current) return;
+    if(playing) { audioRef.current.pause(); setPlaying(false); }
+    else { audioRef.current.play(); setPlaying(true); }
+  };
+
+  const fmt = (s) => {
+    if(!s||isNaN(s)) return "0:00";
+    const m = Math.floor(s/60), sec = Math.floor(s%60);
+    return `${m}:${sec.toString().padStart(2,"0")}`;
+  };
+
+  const seek = (e) => {
+    if(!audioRef.current||!duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    audioRef.current.currentTime = ratio * duration;
+  };
+
+  return (
+    <div style={{marginTop:8,padding:"10px 12px",background:"#F0EEF8",borderRadius:10}}>
+      <audio
+        ref={audioRef}
+        src={url}
+        onTimeUpdate={()=>{setCurrent(audioRef.current.currentTime);setProgress(audioRef.current.currentTime/audioRef.current.duration*100);}}
+        onLoadedMetadata={()=>setDuration(audioRef.current.duration)}
+        onEnded={()=>setPlaying(false)}
+      />
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <button onClick={toggle} style={{width:36,height:36,borderRadius:"50%",border:"none",cursor:"pointer",background:bColor||C.secondary,color:"#fff",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {playing?"⏸":"▶"}
+        </button>
+        <div style={{flex:1}}>
+          <div
+            onClick={seek}
+            style={{height:4,background:"#D4C9B0",borderRadius:2,cursor:"pointer",marginBottom:4}}
+          >
+            <div style={{height:"100%",width:`${progress}%`,background:bColor||C.secondary,borderRadius:2}}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.grisChaud}}>
+            <span>{fmt(current)}</span>
+            <span>{fmt(duration)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AudioCard avec lecteur intégré ────────────────────────────────
+const AudioCard = ({nom,taille,favori,url,playing,onPlay,onFavori,onEdit,onDelete,isAdmin,bColor,bIcon}) => (
+  <div style={{...S.card}}>
+    <div style={{display:"flex",alignItems:"center",gap:12}}>
+      <button onClick={onPlay} style={{width:40,height:40,borderRadius:"50%",border:"none",cursor:"pointer",background:bColor||C.secondary,color:"#fff",fontSize:16,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,boxShadow:`0 2px 8px ${(bColor||C.secondary)}50`}}>
+        {playing?"⏸":(bIcon||"▶")}
+      </button>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{nom}</div>
+        <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{taille}</div>
+      </div>
+      {isAdmin&&(
+        <div style={{display:"flex",gap:4,flexShrink:0}}>
+          {onFavori!==undefined&&<button onClick={e=>{e.stopPropagation();onFavori();}} style={{background:favori?"#FDF3E3":"#F5F5F5",border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:14}}>{favori?"⭐":"☆"}</button>}
+          <button onClick={e=>{e.stopPropagation();onEdit();}} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:13}}>✏️</button>
+          <button onClick={e=>{e.stopPropagation();onDelete();}} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:13}}>🗑</button>
+        </div>
+      )}
+    </div>
+    {playing && url && <AudioPlayer url={url} nom={nom} bColor={bColor}/>}
   </div>
 );
 
@@ -350,7 +464,6 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
     {id:"icones",e:"🏆",l:"Icônes événements",d:"Concours, concerts, stages, résultats"},
     {id:"header",e:"🎨",l:"Couleur du header",d:"Fond de la barre de navigation"},
     {id:"accent",e:"✨",l:"Couleur accent",    d:"Boutons et soulignements"},
-    {id:"autres",e:"📧",l:"Autres réglages",  d:"Notifications, invitations, export"},
   ];
 
   if(!page) return (
@@ -423,17 +536,6 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
     </Modal>
   );
 
-  if(page==="autres") return (
-    <Modal title="Autres réglages" onClose={()=>setPage(null)}>
-      {[["📧","Inviter un membre","Envoyer un lien magic link"],["🔔","Notifications","Gérer les alertes email"],["💾","Exporter","Télécharger CSV ou JSON"]].map(([e,t,d])=>(
-        <div key={t} style={{...S.card,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
-          <span style={{fontSize:22}}>{e}</span>
-          <div><div style={{fontWeight:600,color:C.primary,fontSize:13}}>{t}</div><div style={{fontSize:11,color:C.grisChaud}}>{d}</div></div>
-        </div>
-      ))}
-      <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
-    </Modal>
-  );
   return null;
 }
 
@@ -459,80 +561,40 @@ function AccueilTab({favoris,favorisEvents,allEvents,apparence}) {
           <div style={{color:"#C8D8F0",fontSize:13,marginTop:3}}>📍 {nextRep.lieu}</div>
         </div>
       )}
-
       {dernierConcours&&(
         <div style={{background:C.blanc,border:"1px solid #D4C9B0",borderRadius:16,padding:"18px",marginBottom:16,boxShadow:"0 1px 4px rgba(26,31,110,0.06)"}}>
           <div style={{fontSize:11,color:C.grisChaud,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Dernier concours</div>
           <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:16,marginBottom:2}}>{dernierConcours.titre||"Concours"}</div>
           <div style={{fontSize:12,color:C.grisChaud,marginBottom:14}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {dernierConcours.place_globale&&<div style={{display:"flex",alignItems:"center",gap:12,background:C.rougeClair,borderRadius:10,padding:"10px 14px"}}>
-              {ap.iconeGlobal&&<span style={{fontSize:24,flexShrink:0}}>{ap.iconeGlobal}</span>}
-              <div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Classement général</div><div style={{fontWeight:700,color:C.secondary,fontSize:16}}>{dernierConcours.place_globale} prix</div></div>
-            </div>}
-            {dernierConcours.place_radoux&&<div style={{display:"flex",alignItems:"center",gap:12,background:C.bleuClair,borderRadius:10,padding:"10px 14px"}}>
-              {ap.iconeRadoux&&<span style={{fontSize:24,flexShrink:0}}>{ap.iconeRadoux}</span>}
-              <div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Radoux</div><div style={{fontWeight:700,color:C.primary,fontSize:16}}>{dernierConcours.place_radoux} prix</div></div>
-            </div>}
-            {dernierConcours.place_basse&&<div style={{display:"flex",alignItems:"center",gap:12,background:"#EDE7F6",borderRadius:10,padding:"10px 14px"}}>
-              {ap.iconeBasse&&<span style={{fontSize:24,flexShrink:0}}>{ap.iconeBasse}</span>}
-              <div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Basse</div><div style={{fontWeight:700,color:"#4527A0",fontSize:16}}>{dernierConcours.place_basse} prix</div></div>
-            </div>}
+            {dernierConcours.place_globale&&<div style={{display:"flex",alignItems:"center",gap:12,background:C.rougeClair,borderRadius:10,padding:"10px 14px"}}>{ap.iconeGlobal&&<span style={{fontSize:24,flexShrink:0}}>{ap.iconeGlobal}</span>}<div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Classement général</div><div style={{fontWeight:700,color:C.secondary,fontSize:16}}>{dernierConcours.place_globale} prix</div></div></div>}
+            {dernierConcours.place_radoux&&<div style={{display:"flex",alignItems:"center",gap:12,background:C.bleuClair,borderRadius:10,padding:"10px 14px"}}>{ap.iconeRadoux&&<span style={{fontSize:24,flexShrink:0}}>{ap.iconeRadoux}</span>}<div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Radoux</div><div style={{fontWeight:700,color:C.primary,fontSize:16}}>{dernierConcours.place_radoux} prix</div></div></div>}
+            {dernierConcours.place_basse&&<div style={{display:"flex",alignItems:"center",gap:12,background:"#EDE7F6",borderRadius:10,padding:"10px 14px"}}>{ap.iconeBasse&&<span style={{fontSize:24,flexShrink:0}}>{ap.iconeBasse}</span>}<div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Basse</div><div style={{fontWeight:700,color:"#4527A0",fontSize:16}}>{dernierConcours.place_basse} prix</div></div></div>}
           </div>
           {dernierConcours.note_admin&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #E8E0D0",fontSize:13,color:C.primary,lineHeight:1.7,fontStyle:"italic"}}>{dernierConcours.note_admin}</div>}
         </div>
       )}
-
       {favoris.length>0&&(
         <div style={{marginBottom:16}}>
           <div style={{...S.secTitle,display:"flex",alignItems:"center",gap:8}}><span>⭐</span> Fanfares concours</div>
           {favoris.map(f=>(
             <div key={f.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
               <button style={{width:40,height:40,borderRadius:"50%",border:"none",cursor:"pointer",background:ap.bulleColor||C.secondary,color:"#fff",fontSize:16,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{ap.bulleIcon||"▶"}</button>
-              <div style={{flex:1}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{f.nom}</div>
-                <div style={{fontSize:11,color:C.grisChaud}}>Fanfare concours</div>
-              </div>
+              <div style={{flex:1}}><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{f.nom}</div><div style={{fontSize:11,color:C.grisChaud}}>Fanfare concours</div></div>
             </div>
           ))}
         </div>
       )}
-
-      {favorisEvents.length>0&&(
-        <div style={{marginBottom:16}}>
-          <div style={{...S.secTitle,display:"flex",alignItems:"center",gap:8}}><span>📌</span> À la une</div>
-          {favorisEvents.map(ev=>{
-            const sc=SUB[ev.type];
-            return (
-              <div key={ev.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:40,height:40,borderRadius:10,background:sc.light,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>{evIcons[ev.type]}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:600,color:C.primary,fontSize:13}}>{ev.titre||evLabels[ev.type]}</div>
-                  <div style={{fontSize:11,color:C.grisChaud,marginTop:2,textTransform:"capitalize"}}>{fd(ev.date)} · {ev.heure}</div>
-                </div>
-                <span style={{...S.badge,background:sc.light,color:sc.text}}>{evLabels[ev.type]}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {next3.length>0&&(
         <div>
           <div style={S.secTitle}>Prochains événements</div>
-          {next3.map(ev=>{
-            const sc=SUB[ev.type];
-            return (
-              <div key={ev.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:40,height:40,borderRadius:10,background:sc.light,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>{evIcons[ev.type]}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:600,color:C.primary,fontSize:13}}>{ev.titre||evLabels[ev.type]}</div>
-                  <div style={{fontSize:11,color:C.grisChaud,marginTop:2,textTransform:"capitalize"}}>{fd(ev.date)} · {ev.heure}</div>
-                </div>
-                <span style={{...S.badge,background:sc.light,color:sc.text}}>{evLabels[ev.type]}</span>
-              </div>
-            );
-          })}
+          {next3.map(ev=>{const sc=SUB[ev.type];return(
+            <div key={ev.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:40,height:40,borderRadius:10,background:sc.light,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>{evIcons[ev.type]}</div>
+              <div style={{flex:1}}><div style={{fontWeight:600,color:C.primary,fontSize:13}}>{ev.titre||evLabels[ev.type]}</div><div style={{fontSize:11,color:C.grisChaud,marginTop:2,textTransform:"capitalize"}}>{fd(ev.date)} · {ev.heure}</div></div>
+              <span style={{...S.badge,background:sc.light,color:sc.text}}>{evLabels[ev.type]}</span>
+            </div>
+          );})}
         </div>
       )}
     </div>
@@ -545,42 +607,17 @@ function PalmaresCard({ev,i,isAdmin,ap,events,setEvents,showToast,setModal,setCo
   return (
     <div style={{...S.card,borderLeft:`4px solid ${i===0?C.secondary:"#D4C9B0"}`}}>
       <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
-        <div style={{flex:1}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:14}}>{ev.titre}</div>
-          <div style={{fontSize:11,color:C.grisChaud}}>{fds(ev.date)} · {ev.lieu}</div>
-        </div>
+        <div style={{flex:1}}><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:14}}>{ev.titre}</div><div style={{fontSize:11,color:C.grisChaud}}>{fds(ev.date)} · {ev.lieu}</div></div>
         {i===0&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary}}>Dernier</span>}
         {isAdmin&&<AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
-        {ev.place_globale&&<div style={{display:"flex",alignItems:"center",gap:10,background:C.rougeClair,borderRadius:8,padding:"7px 12px"}}>
-          {ap.iconeGlobal&&<span style={{fontSize:18}}>{ap.iconeGlobal}</span>}
-          <div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Classement général</div><div style={{fontWeight:700,color:C.secondary,fontSize:14}}>{ev.place_globale} prix</div></div>
-        </div>}
-        {ev.place_radoux&&<div style={{display:"flex",alignItems:"center",gap:10,background:C.bleuClair,borderRadius:8,padding:"7px 12px"}}>
-          {ap.iconeRadoux&&<span style={{fontSize:18}}>{ap.iconeRadoux}</span>}
-          <div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Radoux</div><div style={{fontWeight:700,color:C.primary,fontSize:14}}>{ev.place_radoux} prix</div></div>
-        </div>}
-        {ev.place_basse&&<div style={{display:"flex",alignItems:"center",gap:10,background:"#EDE7F6",borderRadius:8,padding:"7px 12px"}}>
-          {ap.iconeBasse&&<span style={{fontSize:18}}>{ap.iconeBasse}</span>}
-          <div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Basse</div><div style={{fontWeight:700,color:"#4527A0",fontSize:14}}>{ev.place_basse} prix</div></div>
-        </div>}
+        {ev.place_globale&&<div style={{display:"flex",alignItems:"center",gap:10,background:C.rougeClair,borderRadius:8,padding:"7px 12px"}}>{ap.iconeGlobal&&<span style={{fontSize:18}}>{ap.iconeGlobal}</span>}<div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Classement général</div><div style={{fontWeight:700,color:C.secondary,fontSize:14}}>{ev.place_globale} prix</div></div></div>}
+        {ev.place_radoux&&<div style={{display:"flex",alignItems:"center",gap:10,background:C.bleuClair,borderRadius:8,padding:"7px 12px"}}>{ap.iconeRadoux&&<span style={{fontSize:18}}>{ap.iconeRadoux}</span>}<div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Radoux</div><div style={{fontWeight:700,color:C.primary,fontSize:14}}>{ev.place_radoux} prix</div></div></div>}
+        {ev.place_basse&&<div style={{display:"flex",alignItems:"center",gap:10,background:"#EDE7F6",borderRadius:8,padding:"7px 12px"}}>{ap.iconeBasse&&<span style={{fontSize:18}}>{ap.iconeBasse}</span>}<div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Basse</div><div style={{fontWeight:700,color:"#4527A0",fontSize:14}}>{ev.place_basse} prix</div></div></div>}
       </div>
-      {isAdmin&&!editNote&&(
-        <button onClick={()=>setEditNote(true)} style={{background:"none",border:"1px dashed #D4C9B0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,color:C.grisChaud,width:"100%",textAlign:"left"}}>
-          {ev.note_admin||"＋ Ajouter une note (visible sur l'accueil)"}
-        </button>
-      )}
-      {isAdmin&&editNote&&(
-        <textarea defaultValue={ev.note_admin||""} autoFocus placeholder="Note sur ce concours…" style={{...S.input,minHeight:70,resize:"vertical",marginBottom:6}}
-          onBlur={async e=>{
-            const val=e.target.value;
-            await supabase.from("evenements").update({note_admin:val}).eq("id",ev.id);
-            setEvents(events.map(x=>x.id===ev.id?{...x,note_admin:val}:x));
-            setEditNote(false); showToast("Note enregistrée ✓");
-          }}
-        />
-      )}
+      {isAdmin&&!editNote&&<button onClick={()=>setEditNote(true)} style={{background:"none",border:"1px dashed #D4C9B0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,color:C.grisChaud,width:"100%",textAlign:"left"}}>{ev.note_admin||"＋ Ajouter une note"}</button>}
+      {isAdmin&&editNote&&<textarea defaultValue={ev.note_admin||""} autoFocus placeholder="Note sur ce concours…" style={{...S.input,minHeight:70,resize:"vertical",marginBottom:6}} onBlur={async e=>{const val=e.target.value;await supabase.from("evenements").update({note_admin:val}).eq("id",ev.id);setEvents(events.map(x=>x.id===ev.id?{...x,note_admin:val}:x));setEditNote(false);showToast("Note enregistrée ✓");}}/>}
       {!isAdmin&&ev.note_admin&&<div style={{fontSize:13,color:C.primary,fontStyle:"italic",paddingTop:8,borderTop:"1px solid #E8E0D0"}}>{ev.note_admin}</div>}
     </div>
   );
@@ -593,48 +630,19 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,onFavorisChange,app
   const ap = apparence||{};
   const today = new Date();
   const upcoming = allEvents.filter(e=>new Date(e.date)>=today).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const past     = allEvents.filter(e=>new Date(e.date)<today).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const past = allEvents.filter(e=>new Date(e.date)<today).sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-  const toggleFav = async(id)=>{
-    const ev=allEvents.find(e=>e.id===id); if(!ev) return;
-    const nv=!ev.favori;
-    await supabase.from("evenements").update({favori:nv}).eq("id",id);
-    const updated=allEvents.map(e=>e.id===id?{...e,favori:nv}:e);
-    setAllEvents(updated); onFavorisChange(updated.filter(e=>e.favori));
-  };
-
+  const toggleFav = async(id)=>{const ev=allEvents.find(e=>e.id===id);if(!ev)return;const nv=!ev.favori;await supabase.from("evenements").update({favori:nv}).eq("id",id);const updated=allEvents.map(e=>e.id===id?{...e,favori:nv}:e);setAllEvents(updated);onFavorisChange(updated.filter(e=>e.favori));};
   const save = async(f)=>{
     const payload={type:f.type,titre:f.titre||"",date:f.date,heure:f.heure,lieu:f.lieu,note:f.note||"",favori:f.favori||false,note_admin:f.note_admin||"",place_globale:f.place_globale||"",place_radoux:f.place_radoux||"",place_basse:f.place_basse||""};
-    if(f.id){
-      await supabase.from("evenements").update(payload).eq("id",f.id);
-      const updated=allEvents.map(e=>e.id===f.id?{...e,...payload,id:f.id}:e);
-      setAllEvents(updated); onFavorisChange(updated.filter(e=>e.favori));
-    } else {
-      const{data}=await supabase.from("evenements").insert([payload]).select().single();
-      if(data){const updated=[...allEvents,{...payload,id:data.id}];setAllEvents(updated);onFavorisChange(updated.filter(e=>e.favori));}
-    }
-    showToast(f.id?"Modifié ✓":"Ajouté ✓"); setModal(null);
+    if(f.id){await supabase.from("evenements").update(payload).eq("id",f.id);const updated=allEvents.map(e=>e.id===f.id?{...e,...payload,id:f.id}:e);setAllEvents(updated);onFavorisChange(updated.filter(e=>e.favori));}
+    else{const{data}=await supabase.from("evenements").insert([payload]).select().single();if(data){const updated=[...allEvents,{...payload,id:data.id}];setAllEvents(updated);onFavorisChange(updated.filter(e=>e.favori));}}
+    showToast(f.id?"Modifié ✓":"Ajouté ✓");setModal(null);
   };
 
-  const SUBTABS=[
-    {id:"avenir",      l:"À venir",     color:C.primary},
-    {id:"repetitions", l:"Répétitions", color:"#1565C0"},
-    {id:"concerts",    l:"Concerts",    color:"#4527A0"},
-    {id:"concours",    l:"Concours",    color:C.secondary},
-    {id:"stages",      l:"Stages",      color:C.bleuMoyen},
-    {id:"palmares",    l:"Palmarès 🏆", color:"#8B0000"},
-  ];
+  const SUBTABS=[{id:"avenir",l:"À venir",color:C.primary},{id:"repetitions",l:"Répétitions",color:"#1565C0"},{id:"concerts",l:"Concerts",color:"#4527A0"},{id:"concours",l:"Concours",color:C.secondary},{id:"stages",l:"Stages",color:C.bleuMoyen},{id:"palmares",l:"Palmarès 🏆",color:"#8B0000"}];
   const LABELS={concert:"Concert",repetition:"Répétition",concours:"Concours",stage:"Stage"};
-
-  const getList=()=>{
-    if(subTab==="avenir")      return upcoming;
-    if(subTab==="repetitions") return [...upcoming,...past].filter(e=>e.type==="repetition");
-    if(subTab==="concerts")    return [...upcoming,...past].filter(e=>e.type==="concert");
-    if(subTab==="concours")    return upcoming.filter(e=>e.type==="concours");
-    if(subTab==="stages")      return [...upcoming,...past].filter(e=>e.type==="stage");
-    if(subTab==="palmares")    return past.filter(e=>e.type==="concours");
-    return [];
-  };
+  const getList=()=>{if(subTab==="avenir")return upcoming;if(subTab==="repetitions")return[...upcoming,...past].filter(e=>e.type==="repetition");if(subTab==="concerts")return[...upcoming,...past].filter(e=>e.type==="concert");if(subTab==="concours")return upcoming.filter(e=>e.type==="concours");if(subTab==="stages")return[...upcoming,...past].filter(e=>e.type==="stage");if(subTab==="palmares")return past.filter(e=>e.type==="concours");return[];};
   const list=getList();
 
   const EF=({init})=>{
@@ -643,19 +651,13 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,onFavorisChange,app
     return (
       <Modal title={f.id?"Modifier":"Nouvel événement"} onClose={()=>setModal(null)}>
         <label style={S.label}>Type</label>
-        <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}>
-          <option value="repetition">Répétition</option><option value="concert">Concert</option><option value="concours">Concours</option><option value="stage">Stage</option>
-        </select>
+        <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}><option value="repetition">Répétition</option><option value="concert">Concert</option><option value="concours">Concours</option><option value="stage">Stage</option></select>
         <label style={S.label}>Titre</label><input style={S.input} value={f.titre||""} onChange={e=>s("titre",e.target.value)} placeholder="Optionnel"/>
         <label style={S.label}>Date *</label><input type="date" style={S.input} value={f.date} onChange={e=>s("date",e.target.value)}/>
         <label style={S.label}>Heure</label><input style={S.input} value={f.heure||""} onChange={e=>s("heure",e.target.value)} placeholder="18h30"/>
         <label style={S.label}>Lieu *</label><input style={S.input} value={f.lieu||""} onChange={e=>s("lieu",e.target.value)}/>
-        <label style={S.label}>Note / résultat</label><input style={S.input} value={f.note||""} onChange={e=>s("note",e.target.value)} placeholder="Optionnel"/>
-        {f.type==="concours"&&<>
-          <label style={S.label}>Place générale</label><input style={S.input} value={f.place_globale||""} onChange={e=>s("place_globale",e.target.value)} placeholder="1er"/>
-          <label style={S.label}>Place Radoux</label><input style={S.input} value={f.place_radoux||""} onChange={e=>s("place_radoux",e.target.value)} placeholder="2ème"/>
-          <label style={S.label}>Place Basse</label><input style={S.input} value={f.place_basse||""} onChange={e=>s("place_basse",e.target.value)} placeholder="1er"/>
-        </>}
+        <label style={S.label}>Note</label><input style={S.input} value={f.note||""} onChange={e=>s("note",e.target.value)} placeholder="Optionnel"/>
+        {f.type==="concours"&&<><label style={S.label}>Place générale</label><input style={S.input} value={f.place_globale||""} onChange={e=>s("place_globale",e.target.value)} placeholder="1er"/><label style={S.label}>Place Radoux</label><input style={S.input} value={f.place_radoux||""} onChange={e=>s("place_radoux",e.target.value)} placeholder="2ème"/><label style={S.label}>Place Basse</label><input style={S.input} value={f.place_basse||""} onChange={e=>s("place_basse",e.target.value)} placeholder="1er"/></>}
         <button style={S.btnP} onClick={()=>f.date&&f.lieu&&save(f)}>{f.id?"Enregistrer":"Ajouter"}</button>
         <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
       </Modal>
@@ -667,25 +669,17 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,onFavorisChange,app
       <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:12,marginBottom:8,scrollbarWidth:"none"}}>
         {SUBTABS.map(st=><button key={st.id} onClick={()=>setSubTab(st.id)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",whiteSpace:"nowrap",fontSize:12,fontFamily:"Inter,sans-serif",fontWeight:subTab===st.id?700:400,background:subTab===st.id?st.color:"#E8E0D0",color:subTab===st.id?"#fff":C.grisChaud,transition:"all 0.18s",flexShrink:0}}>{st.l}</button>)}
       </div>
-
       {subTab==="palmares"?(
-        <div>
-          {list.length===0&&<div style={{color:C.grisChaud,fontSize:13,paddingTop:20}}>Aucun concours passé.</div>}
-          {list.map((ev,i)=><PalmaresCard key={ev.id} ev={ev} i={i} isAdmin={isAdmin} ap={ap} events={allEvents} setEvents={setAllEvents} showToast={showToast} setModal={setModal} setConfirm={setConfirm}/>)}
-        </div>
+        <div>{list.length===0&&<div style={{color:C.grisChaud,fontSize:13,paddingTop:20}}>Aucun concours passé.</div>}{list.map((ev,i)=><PalmaresCard key={ev.id} ev={ev} i={i} isAdmin={isAdmin} ap={ap} events={allEvents} setEvents={setAllEvents} showToast={showToast} setModal={setModal} setConfirm={setConfirm}/>)}</div>
       ):(
         <div>
           {list.length===0&&<div style={{color:C.grisChaud,fontSize:13,paddingTop:20}}>Aucun événement.</div>}
-
           {subTab==="avenir"&&list.filter(e=>e.type==="repetition").length>0&&(
             <div style={{background:C.bleuClair,border:`1px solid ${C.primary}30`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
               <div style={{fontSize:11,color:C.primary,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>📅 Répétitions à venir</div>
               {list.filter(e=>e.type==="repetition").map(ev=>(
                 <div key={ev.id} style={{display:"flex",alignItems:"center",paddingBottom:6,marginBottom:6,borderBottom:`1px solid ${C.primary}20`}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:600,color:C.primary,fontSize:13,textTransform:"capitalize"}}>{fd(ev.date)}</div>
-                    <div style={{fontSize:11,color:C.bleuMoyen}}>🕐 {ev.heure} · {ev.lieu}</div>
-                  </div>
+                  <div style={{flex:1}}><div style={{fontWeight:600,color:C.primary,fontSize:13,textTransform:"capitalize"}}>{fd(ev.date)}</div><div style={{fontSize:11,color:C.bleuMoyen}}>🕐 {ev.heure} · {ev.lieu}</div></div>
                   <div style={{display:"flex",gap:4}}>
                     <button onClick={e=>{e.stopPropagation();toggleFav(ev.id);}} style={{background:ev.favori?"#FDF3E3":"#F5F5F5",border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:14}}>{ev.favori?"⭐":"☆"}</button>
                     {isAdmin&&<AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
@@ -694,27 +688,7 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,onFavorisChange,app
               ))}
             </div>
           )}
-
-          {subTab==="repetitions"&&list.map(ev=>{
-            const isPast=new Date(ev.date)<today;
-            return (
-              <div key={ev.id} style={{...S.card,opacity:isPast?0.65:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{width:40,height:40,borderRadius:10,background:C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>🎺</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,color:C.primary,fontSize:13,textTransform:"capitalize"}}>{fd(ev.date)}</div>
-                    <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>🕐 {ev.heure} · {ev.lieu}</div>
-                  </div>
-                  <div style={{display:"flex",gap:4,flexShrink:0}}>
-                    <button onClick={e=>{e.stopPropagation();toggleFav(ev.id);}} style={{background:ev.favori?"#FDF3E3":"#F5F5F5",border:"none",cursor:"pointer",padding:"5px 7px",borderRadius:6,fontSize:14}}>{ev.favori?"⭐":"☆"}</button>
-                    {isAdmin&&<AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {list.filter(e=>e.type!=="repetition"&&subTab!=="repetitions").map(ev=>{
+          {list.filter(e=>!(subTab==="avenir"&&e.type==="repetition")).map(ev=>{
             const sc=SUB[ev.type];
             return (
               <div key={ev.id} style={S.card}>
@@ -735,7 +709,6 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,onFavorisChange,app
           })}
         </div>
       )}
-
       {isAdmin&&<BtnPlus onClick={()=>setModal("new")}/>}
       {modal&&<EF init={modal==="new"?null:modal}/>}
       {confirm&&<Confirm msg="Supprimer cet événement ?" onConfirm={async()=>{await supabase.from("evenements").delete().eq("id",confirm.id);const updated=allEvents.filter(e=>e.id!==confirm.id);setAllEvents(updated);onFavorisChange(updated.filter(e=>e.favori));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
@@ -756,10 +729,7 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
 
   const load = useCallback(async()=>{
     setLoading(true);
-    const [{data:d},{data:f}] = await Promise.all([
-      supabase.from("dossiers").select("*").eq("categorie","biblio").order("ordre"),
-      supabase.from("fichiers").select("*"),
-    ]);
+    const [{data:d},{data:f}] = await Promise.all([supabase.from("dossiers").select("*").eq("categorie","biblio").order("ordre"),supabase.from("fichiers").select("*")]);
     setDossiers(d||[]);
     const mapped=(f||[]).map(x=>({...x,dossier_id:x.morceau_id}));
     setFichiers(mapped);
@@ -774,7 +744,7 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
     await supabase.from("fichiers").update({favori:nv}).eq("id",f.id);
     setFichiers(fs=>fs.map(x=>x.id===f.id?{...x,favori:nv}:x));
     if(nv) setFavoris(prev=>[...prev,{...f,favori:true}]);
-    else   setFavoris(prev=>prev.filter(x=>x.id!==f.id));
+    else setFavoris(prev=>prev.filter(x=>x.id!==f.id));
     showToast(nv?"⭐ Ajouté aux fanfares concours":"Retiré des favoris");
   };
 
@@ -788,35 +758,32 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
       if(!f.nom) return;
       if(f.id){await supabase.from("dossiers").update({nom:f.nom,emoji:f.emoji,color:f.color}).eq("id",f.id);}
       else{await supabase.from("dossiers").insert([{nom:f.nom,emoji:f.emoji,color:f.color,categorie:"biblio",ordre:dossiers.length+1}]);}
-      showToast(f.id?"Modifié ✓":"Dossier créé ✓"); setModal(null); load();
+      showToast(f.id?"Modifié ✓":"Dossier créé ✓");setModal(null);load();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau dossier"} onClose={()=>setModal(null)}>
         <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
         <label style={S.label}>Icône</label>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-          {EMOJIS.map(e=><button key={e} onClick={()=>s("emoji",e)} style={{width:36,height:36,borderRadius:8,border:f.emoji===e?`2px solid ${C.secondary}`:"1px solid #D4C9B0",background:f.emoji===e?C.rougeClair:C.blanc,cursor:"pointer",fontSize:18}}>{e}</button>)}
-        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{EMOJIS.map(e=><button key={e} onClick={()=>s("emoji",e)} style={{width:36,height:36,borderRadius:8,border:f.emoji===e?`2px solid ${C.secondary}`:"1px solid #D4C9B0",background:f.emoji===e?C.rougeClair:C.blanc,cursor:"pointer",fontSize:18}}>{e}</button>)}</div>
         <label style={S.label}>Couleur</label>
-        <div style={{display:"flex",gap:8,marginBottom:14}}>
-          {COLS.map(col=><button key={col} onClick={()=>s("color",col)} style={{width:28,height:28,borderRadius:"50%",border:f.color===col?"3px solid #333":"2px solid transparent",background:col,cursor:"pointer"}}/>)}
-        </div>
+        <div style={{display:"flex",gap:8,marginBottom:14}}>{COLS.map(col=><button key={col} onClick={()=>s("color",col)} style={{width:28,height:28,borderRadius:"50%",border:f.color===col?"3px solid #333":"2px solid transparent",background:col,cursor:"pointer"}}/>)}</div>
         <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
         <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
       </Modal>
     );
   };
 
+  // Formulaire fichier avec upload
   const FF=({init})=>{
     const did=actif?.id||dossiers[0]?.id;
     const [f,setF]=useState(init||{dossier_id:did,nom:"",type:"audio",url:"",taille:""});
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
     const save=async()=>{
-      if(!f.nom) return;
-      const payload={morceau_id:f.dossier_id,nom:f.nom,type:f.type,url:f.url||"",taille:f.taille||"",favori:f.favori||false};
+      if(!f.nom||!f.url) return;
+      const payload={morceau_id:f.dossier_id,nom:f.nom,type:f.type,url:f.url,taille:f.taille||"",favori:f.favori||false};
       if(f.id){await supabase.from("fichiers").update(payload).eq("id",f.id);}
       else{await supabase.from("fichiers").insert([payload]);}
-      showToast("Fichier ajouté ✓"); setModal(null); load();
+      showToast("Fichier ajouté ✓");setModal(null);load();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau fichier"} onClose={()=>setModal(null)}>
@@ -826,12 +793,18 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
         </select>
         <label style={S.label}>Type</label>
         <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}>
-          <option value="audio">Audio</option><option value="pdf">PDF</option><option value="midi">MIDI</option><option value="autre">Autre</option>
+          <option value="audio">Audio (MP3…)</option><option value="pdf">PDF</option><option value="midi">MIDI</option><option value="autre">Autre</option>
         </select>
-        <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
-        <label style={S.label}>URL (Drive…)</label><input style={S.input} value={f.url||""} onChange={e=>s("url",e.target.value)} placeholder="https://drive.google.com/…"/>
-        <label style={S.label}>Taille</label><input style={S.input} value={f.taille||""} onChange={e=>s("taille",e.target.value)} placeholder="2.4 Mo"/>
-        <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Ajouter"}</button>
+        {!f.id && (
+          <FileUpload
+            label="Choisir un fichier"
+            accept={f.type==="audio"?"audio/*":f.type==="pdf"?"application/pdf":"*"}
+            onUploaded={({url,nom,taille})=>{s("url",url);if(!f.nom)s("nom",nom);s("taille",taille);}}
+          />
+        )}
+        {f.url&&<div style={{fontSize:11,color:C.grisChaud,marginBottom:8,background:"#EEF2FF",padding:"6px 10px",borderRadius:6}}>✓ Fichier prêt</div>}
+        <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)} placeholder="Nom affiché"/>
+        <button style={{...S.btnP,opacity:(!f.nom||!f.url)?0.5:1}} onClick={save}>{f.id?"Enregistrer":"Ajouter"}</button>
         <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
       </Modal>
     );
@@ -848,16 +821,7 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
         />
       )}
       {isAdmin&&<BtnPlus onClick={()=>setModal({t:"choix"})}/>}
-      {modal?.t==="choix"&&(
-        <Modal title="Ajouter…" onClose={()=>setModal(null)}>
-          {[["dossier","📁","Nouveau dossier"],["fichier","📎","Nouveau fichier"]].map(([id,e,t])=>(
-            <div key={id} onClick={()=>setModal({t:id})} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
-              <span style={{fontSize:22}}>{e}</span><div style={{fontWeight:700,color:C.primary,fontSize:13}}>{t}</div>
-            </div>
-          ))}
-          <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-        </Modal>
-      )}
+      {modal?.t==="choix"&&(<Modal title="Ajouter…" onClose={()=>setModal(null)}>{[["dossier","📁","Nouveau dossier"],["fichier","📎","Nouveau fichier"]].map(([id,e,t])=>(<div key={id} onClick={()=>setModal({t:id})} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:10}}><span style={{fontSize:22}}>{e}</span><div style={{fontWeight:700,color:C.primary,fontSize:13}}>{t}</div></div>))}<button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button></Modal>)}
       {modal?.t==="dossier"&&<DF init={modal.data||null}/>}
       {modal?.t==="fichier"&&<FF init={null}/>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
@@ -867,11 +831,11 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
   const contenu=fichiers.filter(f=>f.morceau_id===actif.id);
   return (
     <>
-      <Breadcrumb items={[`${actif.emoji} ${actif.nom}`]} onBack={()=>{setActif(null);setModal(null);}}/>
+      <Breadcrumb items={[`${actif.emoji} ${actif.nom}`]} onBack={()=>{setActif(null);setModal(null);setPlaying(null);}}/>
       {contenu.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Dossier vide — bouton + pour ajouter.</div>}
       {contenu.map(f=>{
-        if(f.type==="audio") return <AudioCard key={f.id} nom={f.nom} taille={f.taille} favori={f.favori} playing={playing===f.id} onPlay={()=>setPlaying(playing===f.id?null:f.id)} onFavori={()=>toggleFav(f)} onEdit={()=>setModal({t:"fichier",data:{...f,dossier_id:f.morceau_id}})} onDelete={()=>setConfirm({id:f.id,msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})} isAdmin={isAdmin} bColor={ap.bulleColor} bIcon={ap.bulleIcon}/>;
-        if(f.type==="pdf")  return <PdfCard  key={f.id} nom={f.nom} taille={f.taille} url={f.url} onEdit={()=>setModal({t:"fichier",data:{...f,dossier_id:f.morceau_id}})} onDelete={()=>setConfirm({id:f.id,msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})} isAdmin={isAdmin}/>;
+        if(f.type==="audio") return <AudioCard key={f.id} nom={f.nom} taille={f.taille} favori={f.favori} url={f.url} playing={playing===f.id} onPlay={()=>setPlaying(playing===f.id?null:f.id)} onFavori={()=>toggleFav(f)} onEdit={()=>setModal({t:"fichier",data:{...f,dossier_id:f.morceau_id}})} onDelete={()=>setConfirm({id:f.id,msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})} isAdmin={isAdmin} bColor={ap.bulleColor} bIcon={ap.bulleIcon}/>;
+        if(f.type==="pdf") return <PdfCard key={f.id} nom={f.nom} taille={f.taille} url={f.url} onEdit={()=>setModal({t:"fichier",data:{...f,dossier_id:f.morceau_id}})} onDelete={()=>setConfirm({id:f.id,msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})} isAdmin={isAdmin}/>;
         return <FileCard key={f.id} nom={f.nom} taille={f.taille} url={f.url} typeLabel={f.type==="midi"?"MIDI":"Fichier"} onEdit={()=>setModal({t:"fichier",data:{...f,dossier_id:f.morceau_id}})} onDelete={()=>setConfirm({id:f.id,msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})} isAdmin={isAdmin}/>;
       })}
       {isAdmin&&<BtnPlus onClick={()=>setModal({t:"fichier"})}/>}
@@ -904,8 +868,7 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
       }));
       return{...d,sousDossiers};
     }));
-    setDossiers(withSubs);
-    setLoading(false);
+    setDossiers(withSubs);setLoading(false);
   },[]);
 
   useEffect(()=>{load();},[load]);
@@ -914,36 +877,35 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
     const [f,setF]=useState(init||{nom:"",date:new Date().toISOString().split("T")[0]});
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
     const dData=dossiers.find(x=>x.id===dossierId);
-    const auto=f.date?`${dData?.id==="dm"||dData?.nom?.includes("DM")?"Séance":"Répétition"} ${new Date(f.date).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}`:"";
-    const save=async()=>{
-      const nom=f.nom||auto; if(!nom) return;
-      if(f.id){await supabase.from("sous_dossiers").update({nom,date:f.date}).eq("id",f.id);}
-      else{await supabase.from("sous_dossiers").insert([{dossier_id:dossierId,nom,date:f.date}]);}
-      showToast("Dossier créé ✓"); setModal(null); load();
-    };
-    return (
-      <Modal title={f.id?"Modifier":"Nouvelle séance"} onClose={()=>setModal(null)}>
-        <label style={S.label}>Date *</label><input type="date" style={S.input} value={f.date} onChange={e=>s("date",e.target.value)}/>
-        <label style={S.label}>Nom (optionnel)</label><input style={S.input} value={f.nom||""} onChange={e=>s("nom",e.target.value)} placeholder={auto}/>
-        <div style={{fontSize:11,color:C.grisChaud,marginBottom:12,marginTop:-6}}>Laisse vide pour nommer automatiquement</div>
-        <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
-        <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-      </Modal>
-    );
+    const auto=f.date?`Répétition ${new Date(f.date).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}`:"";
+    const save=async()=>{const nom=f.nom||auto;if(!nom)return;if(f.id){await supabase.from("sous_dossiers").update({nom,date:f.date}).eq("id",f.id);}else{await supabase.from("sous_dossiers").insert([{dossier_id:dossierId,nom,date:f.date}]);}showToast("Dossier créé ✓");setModal(null);load();};
+    return (<Modal title={f.id?"Modifier":"Nouvelle séance"} onClose={()=>setModal(null)}><label style={S.label}>Date *</label><input type="date" style={S.input} value={f.date} onChange={e=>s("date",e.target.value)}/><label style={S.label}>Nom (optionnel)</label><input style={S.input} value={f.nom||""} onChange={e=>s("nom",e.target.value)} placeholder={auto}/><div style={{fontSize:11,color:C.grisChaud,marginBottom:12,marginTop:-6}}>Laisse vide pour nommer automatiquement</div><button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button><button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button></Modal>);
   };
 
-  const NF=({init,dossierId,sdId})=>{
+  const NF=({init,sdId})=>{
     const [f,setF]=useState(init||{titre:"",contenu:"",type:"texte"});
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=async()=>{
-      if(!f.titre||!f.contenu) return;
-      const payload={titre:f.titre,contenu:f.contenu,type:f.type||"texte",duree:f.duree||"",favori:f.favori||false};
-      if(f.id){await supabase.from("notes").update(payload).eq("id",f.id);}
-      else{await supabase.from("notes").insert([{...payload,sous_dossier_id:sdId}]);}
-      showToast(f.id?"Modifié ✓":"Publié ✓"); setModal(null); load();
-    };
+    const save=async()=>{if(!f.titre||!f.contenu)return;const payload={titre:f.titre,contenu:f.contenu,type:f.type||"texte",duree:f.duree||"",favori:f.favori||false};if(f.id){await supabase.from("notes").update(payload).eq("id",f.id);}else{await supabase.from("notes").insert([{...payload,sous_dossier_id:sdId}]);}showToast(f.id?"Modifié ✓":"Publié ✓");setModal(null);load();};
+
+    // Si type audio : upload fichier
+    if(f.type==="audio"||(!f.id&&f.type==="audio")) {
+      return (
+        <Modal title={f.id?"Modifier":"Nouvelle note audio"} onClose={()=>setModal(null)}>
+          <label style={S.label}>Type</label>
+          <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}><option value="texte">Note texte</option><option value="audio">Enregistrement audio</option></select>
+          {!f.contenu&&<FileUpload label="Fichier audio" accept="audio/*" onUploaded={({url,nom,taille})=>{s("contenu",url);if(!f.titre)s("titre",nom);s("duree",taille);}}/>}
+          {f.contenu&&<div style={{fontSize:11,color:C.grisChaud,marginBottom:8,background:"#EEF2FF",padding:"6px 10px",borderRadius:6}}>✓ Audio prêt</div>}
+          <label style={S.label}>Titre *</label><input style={S.input} value={f.titre} onChange={e=>s("titre",e.target.value)}/>
+          <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Publier"}</button>
+          <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
+        </Modal>
+      );
+    }
+
     return (
       <Modal title={f.id?"Modifier":"Nouvelle note"} onClose={()=>setModal(null)}>
+        <label style={S.label}>Type</label>
+        <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}><option value="texte">Note texte</option><option value="audio">Enregistrement audio</option></select>
         <label style={S.label}>Titre *</label><input style={S.input} value={f.titre} onChange={e=>s("titre",e.target.value)}/>
         <label style={S.label}>Contenu *</label>
         <textarea value={f.contenu} onChange={e=>s("contenu",e.target.value)} style={{...S.input,minHeight:130,resize:"vertical"}}/>
@@ -954,15 +916,7 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
   };
 
   if(loading) return <Spinner/>;
-
-  if(!actif) return (
-    <>
-      <DossierGrid
-        dossiers={dossiers.map(d=>({...d,count:(d.sousDossiers||[]).length,countLabel:"séance(s)"}))}
-        onOpen={d=>{setActif(d);setSousActif(null);}} isAdmin={false}
-      />
-    </>
-  );
+  if(!actif) return <DossierGrid dossiers={dossiers.map(d=>({...d,count:(d.sousDossiers||[]).length,countLabel:"séance(s)"}))} onOpen={d=>{setActif(d);setSousActif(null);}} isAdmin={false}/>;
 
   const dData=dossiers.find(x=>x.id===actif.id);
   if(!dData) return null;
@@ -970,20 +924,15 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
   if(!sousActif) return (
     <>
       <Breadcrumb items={[`${dData.emoji} ${dData.nom}`]} onBack={()=>{setActif(null);setModal(null);}}/>
-      {(dData.sousDossiers||[]).length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucune séance — bouton + pour en créer une.</div>}
+      {(dData.sousDossiers||[]).length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucune séance.</div>}
       {(dData.sousDossiers||[]).map(sd=>(
         <div key={sd.id} onClick={()=>setSousActif(sd)} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
           <div style={{width:44,height:44,borderRadius:10,background:dData.color+"20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,border:`1px solid ${dData.color}30`}}>📁</div>
-          <div style={{flex:1}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{sd.nom}</div>
-            <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{(sd.notes||[]).length} note(s)</div>
-          </div>
-          {isAdmin&&(
-            <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setModal({t:"sd",data:sd})} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>✏️</button>
-              <button onClick={()=>setConfirm({msg:`Supprimer "${sd.nom}" ?`,fn:async()=>{await supabase.from("sous_dossiers").delete().eq("id",sd.id);showToast("Supprimé ✓");setConfirm(null);load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>🗑</button>
-            </div>
-          )}
+          <div style={{flex:1}}><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{sd.nom}</div><div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{(sd.notes||[]).length} note(s)</div></div>
+          {isAdmin&&(<div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>setModal({t:"sd",data:sd})} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>✏️</button>
+            <button onClick={()=>setConfirm({msg:`Supprimer "${sd.nom}" ?`,fn:async()=>{await supabase.from("sous_dossiers").delete().eq("id",sd.id);showToast("Supprimé ✓");setConfirm(null);load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>🗑</button>
+          </div>)}
         </div>
       ))}
       {isAdmin&&<BtnPlus onClick={()=>setModal({t:"sd"})}/>}
@@ -995,38 +944,31 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
   const sd=(dData.sousDossiers||[]).find(x=>x.id===sousActif.id);
   if(!sd) return null;
 
-  const toggleFavNote=async(n)=>{
-    const nv=!n.favori;
-    await supabase.from("notes").update({favori:nv}).eq("id",n.id);
-    showToast(nv?"⭐ Ajouté aux favoris":"Retiré des favoris");
-    load();
-  };
-
   return (
     <>
       <Breadcrumb items={[`${dData.emoji} ${dData.nom}`,`› ${sd.nom}`]} onBack={()=>{setSousActif(null);setOpenNote(null);setModal(null);}}/>
-      {(sd.notes||[]).length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucune note — bouton + pour en créer une.</div>}
+      {(sd.notes||[]).length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucune note.</div>}
       {(sd.notes||[]).map(n=>{
-        const isAudio=n.type==="audio"||dData.nom?.includes("Enregistrement");
+        const isAudio=n.type==="audio";
         if(isAudio) return (
-          <div key={n.id}>
-            <AudioCard nom={n.titre} taille={n.duree||""} favori={n.favori||false} playing={openNote===n.id} onPlay={()=>setOpenNote(openNote===n.id?null:n.id)} onFavori={()=>toggleFavNote(n)} onEdit={()=>setModal({t:"note",data:n})} onDelete={()=>setConfirm({msg:`Supprimer "${n.titre}" ?`,fn:async()=>{await supabase.from("notes").delete().eq("id",n.id);showToast("Supprimé ✓");setConfirm(null);load();}})} isAdmin={isAdmin} bColor={ap.bulleColor} bIcon={ap.bulleIcon}/>
-            {openNote===n.id&&n.contenu&&<div style={{background:C.blanc,border:"1px solid #D4C9B0",borderRadius:10,padding:"12px 14px",marginTop:-6,marginBottom:10,fontSize:13,color:C.primary,lineHeight:1.8,whiteSpace:"pre-line"}}>{n.contenu}</div>}
+          <div key={n.id} style={S.card}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <button onClick={()=>setOpenNote(openNote===n.id?null:n.id)} style={{width:40,height:40,borderRadius:"50%",border:"none",cursor:"pointer",background:ap.bulleColor||C.secondary,color:"#fff",fontSize:16,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{openNote===n.id?"⏸":"▶"}</button>
+              <div style={{flex:1,minWidth:0}}><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.titre}</div><div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{n.duree}</div></div>
+              {isAdmin&&<AA onEdit={()=>setModal({t:"note",data:n})} onDelete={()=>setConfirm({msg:`Supprimer "${n.titre}" ?`,fn:async()=>{await supabase.from("notes").delete().eq("id",n.id);showToast("Supprimé ✓");setConfirm(null);load();}})}/>}
+            </div>
+            {openNote===n.id&&n.contenu&&<AudioPlayer url={n.contenu} nom={n.titre} bColor={ap.bulleColor}/>}
           </div>
         );
         return (
           <div key={n.id} style={{...S.card,cursor:"pointer"}} onClick={()=>setOpenNote(openNote===n.id?null:n.id)}>
             <div style={{display:"flex",alignItems:"flex-start"}}>
-              <div style={{flex:1}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:14}}>{n.titre}</div>
-              </div>
+              <div style={{flex:1}}><div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:14}}>{n.titre}</div></div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
-                {isAdmin&&(
-                  <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
-                    <button onClick={()=>setModal({t:"note",data:n})} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>✏️</button>
-                    <button onClick={()=>setConfirm({msg:`Supprimer "${n.titre}" ?`,fn:async()=>{await supabase.from("notes").delete().eq("id",n.id);showToast("Supprimé ✓");setConfirm(null);load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>🗑</button>
-                  </div>
-                )}
+                {isAdmin&&(<div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                  <button onClick={()=>setModal({t:"note",data:n})} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>✏️</button>
+                  <button onClick={()=>setConfirm({msg:`Supprimer "${n.titre}" ?`,fn:async()=>{await supabase.from("notes").delete().eq("id",n.id);showToast("Supprimé ✓");setConfirm(null);load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>🗑</button>
+                </div>)}
                 <span style={{color:C.grisChaud,fontSize:16,transform:openNote===n.id?"rotate(180deg)":"none",transition:"0.2s"}}>▾</span>
               </div>
             </div>
@@ -1035,30 +977,25 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
         );
       })}
       {isAdmin&&<BtnPlus onClick={()=>setModal({t:"note"})}/>}
-      {modal?.t==="note"&&<NF init={modal.data||null} dossierId={actif.id} sdId={sd.id}/>}
+      {modal?.t==="note"&&<NF init={modal.data||null} sdId={sd.id}/>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
   );
 }
 
-// ── AUTH — EMAIL + MOT DE PASSE (plus de magic link) ──────────────
+// ── AUTH ──────────────────────────────────────────────────────────
 function AuthScreen({onClose}) {
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
   const [error,setError] = useState("");
   const [loading,setLoading] = useState(false);
-
-  const login = async() => {
+  const login = async()=>{
     if(!email||!password) return;
-    setLoading(true);
-    setError("");
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-    if(err) {
-      setError("Email ou mot de passe incorrect.");
-    }
+    setLoading(true); setError("");
+    const{error:err}=await supabase.auth.signInWithPassword({email,password});
+    if(err) setError("Email ou mot de passe incorrect.");
     setLoading(false);
   };
-
   return (
     <div style={{minHeight:"100vh",background:C.parchemin,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
       <TrompeLogo size={56} color={C.secondary}/>
@@ -1066,31 +1003,11 @@ function AuthScreen({onClose}) {
       <div style={{color:C.grisChaud,fontSize:12,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:36}}>Groupe de Trompe de Chasse</div>
       <div style={{width:"100%",maxWidth:320}}>
         <label style={S.label}>Email</label>
-        <input
-          type="email"
-          placeholder="ton@email.fr"
-          value={email}
-          onChange={e=>setEmail(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&login()}
-          style={S.input}
-        />
+        <input type="email" placeholder="ton@email.fr" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={S.input}/>
         <label style={S.label}>Mot de passe</label>
-        <input
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={e=>setPassword(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&login()}
-          style={S.input}
-        />
-        {error&&(
-          <div style={{background:C.rougeClair,border:`1px solid ${C.secondary}40`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.secondary,marginBottom:10}}>
-            {error}
-          </div>
-        )}
-        <button onClick={login} disabled={loading} style={S.btnP}>
-          {loading?"Connexion…":"Se connecter"}
-        </button>
+        <input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={S.input}/>
+        {error&&<div style={{background:C.rougeClair,border:`1px solid ${C.secondary}40`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.secondary,marginBottom:10}}>{error}</div>}
+        <button onClick={login} disabled={loading} style={S.btnP}>{loading?"Connexion…":"Se connecter"}</button>
         {onClose&&<button onClick={onClose} style={S.btnS}>Annuler</button>}
       </div>
     </div>
@@ -1115,62 +1032,22 @@ export default function App() {
   const [favoris,setFavoris] = useState([]);
   const [favorisEvents,setFavorisEvents] = useState([]);
   const [allEvents,setAllEvents] = useState([]);
-  const [apparence,setApparenceState] = useState({
-    bulleColor:"#C8102E",bulleIcon:"▶",headerColor:"#1A1F6E",accentColor:"#C8102E",
-    iconeGlobal:"🏆",iconeRadoux:"🎺",iconeBasse:"🎶",
-    iconeConcert:"🎶",iconeConcours:"🏆",iconeStage:"🌲",iconeRepetition:"🎺",
-  });
+  const [apparence,setApparenceState] = useState({bulleColor:"#C8102E",bulleIcon:"▶",headerColor:"#1A1F6E",accentColor:"#C8102E",iconeGlobal:"🏆",iconeRadoux:"🎺",iconeBasse:"🎶",iconeConcert:"🎶",iconeConcours:"🏆",iconeStage:"🌲",iconeRepetition:"🎺"});
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data})=>{
-      setSession(data.session);
-      if(data.session) loadUser(data.session.user.email);
-    });
-    const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{
-      setSession(s);
-      if(s) loadUser(s.user.email);
-      else{setIsAdmin(false);setCurrentUser(null);}
-    });
+    supabase.auth.getSession().then(({data})=>{setSession(data.session);if(data.session)loadUser(data.session.user.email);});
+    const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{setSession(s);if(s)loadUser(s.user.email);else{setIsAdmin(false);setCurrentUser(null);}});
     return()=>subscription.unsubscribe();
   },[]);
 
-  const loadUser=async(email)=>{
-    const{data}=await supabase.from("membres").select("*").eq("email",email).single();
-    if(data){setIsAdmin(data.is_admin||false);setCurrentUser(data);}
-  };
+  const loadUser=async(email)=>{const{data}=await supabase.from("membres").select("*").eq("email",email).single();if(data){setIsAdmin(data.is_admin||false);setCurrentUser(data);}};
 
-  useEffect(()=>{
-    supabase.from("evenements").select("*").order("date").then(({data})=>{
-      const evs=data||[];
-      setAllEvents(evs);
-      setFavorisEvents(evs.filter(e=>e.favori));
-    });
-  },[]);
+  useEffect(()=>{supabase.from("evenements").select("*").order("date").then(({data})=>{const evs=data||[];setAllEvents(evs);setFavorisEvents(evs.filter(e=>e.favori));});},[]);
+  useEffect(()=>{supabase.from("apparence").select("*").eq("id",1).single().then(({data})=>{if(data)setApparenceState({bulleColor:data.bulle_color||"#C8102E",bulleIcon:data.bulle_icon||"▶",headerColor:data.header_color||"#1A1F6E",accentColor:data.accent_color||"#C8102E",iconeGlobal:data.icone_global||"🏆",iconeRadoux:data.icone_radoux||"🎺",iconeBasse:data.icone_basse||"🎶",iconeConcert:data.icone_concert||"🎶",iconeConcours:data.icone_concours||"🏆",iconeStage:data.icone_stage||"🌲",iconeRepetition:data.icone_repetition||"🎺"});});},[]);
 
-  useEffect(()=>{
-    supabase.from("apparence").select("*").eq("id",1).single().then(({data})=>{
-      if(data) setApparenceState({
-        bulleColor:data.bulle_color||"#C8102E",bulleIcon:data.bulle_icon||"▶",
-        headerColor:data.header_color||"#1A1F6E",accentColor:data.accent_color||"#C8102E",
-        iconeGlobal:data.icone_global||"🏆",iconeRadoux:data.icone_radoux||"🎺",
-        iconeBasse:data.icone_basse||"🎶",iconeConcert:data.icone_concert||"🎶",
-        iconeConcours:data.icone_concours||"🏆",iconeStage:data.icone_stage||"🌲",
-        iconeRepetition:data.icone_repetition||"🎺",
-      });
-    });
-  },[]);
-
-  const setApparence=async(ap)=>{
-    setApparenceState(ap);
-    await supabase.from("apparence").upsert({id:1,bulle_color:ap.bulleColor,bulle_icon:ap.bulleIcon,header_color:ap.headerColor,accent_color:ap.accentColor,icone_global:ap.iconeGlobal,icone_radoux:ap.iconeRadoux,icone_basse:ap.iconeBasse,icone_concert:ap.iconeConcert,icone_concours:ap.iconeConcours,icone_stage:ap.iconeStage,icone_repetition:ap.iconeRepetition});
-  };
-
+  const setApparence=async(ap)=>{setApparenceState(ap);await supabase.from("apparence").upsert({id:1,bulle_color:ap.bulleColor,bulle_icon:ap.bulleIcon,header_color:ap.headerColor,accent_color:ap.accentColor,icone_global:ap.iconeGlobal,icone_radoux:ap.iconeRadoux,icone_basse:ap.iconeBasse,icone_concert:ap.iconeConcert,icone_concours:ap.iconeConcours,icone_stage:ap.iconeStage,icone_repetition:ap.iconeRepetition});};
   const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(null),2200);};
-
-  const handleMenu=(id)=>{
-    if(id==="deconnexion"){supabase.auth.signOut();showToast("Déconnecté");return;}
-    setModalMenu(id);
-  };
+  const handleMenu=(id)=>{if(id==="deconnexion"){supabase.auth.signOut();showToast("Déconnecté");return;}setModalMenu(id);};
 
   if(session===undefined) return <div style={{minHeight:"100vh",background:C.parchemin}}/>;
 
@@ -1181,8 +1058,6 @@ export default function App() {
   return (
     <div style={{minHeight:"100vh",background:C.parchemin,fontFamily:"Inter,sans-serif",maxWidth:480,margin:"0 auto"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none}`}</style>
-
-      {/* Header */}
       <div style={{background:hColor,padding:"14px 16px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1193,44 +1068,30 @@ export default function App() {
             </div>
           </div>
           <div style={{position:"relative"}}>
-            <button onClick={()=>setMenuOpen(o=>!o)} style={{background:session?aColor:"#666",border:"none",cursor:"pointer",width:34,height:34,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:session?13:18,fontFamily:"'Playfair Display',serif"}}>
-              {initials}
-            </button>
+            <button onClick={()=>setMenuOpen(o=>!o)} style={{background:session?aColor:"#666",border:"none",cursor:"pointer",width:34,height:34,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:session?13:18,fontFamily:"'Playfair Display',serif"}}>{initials}</button>
             {menuOpen&&<MenuDeroulant isAdmin={isAdmin} onNav={handleMenu} onClose={()=>setMenuOpen(false)} session={session} currentUser={currentUser}/>}
           </div>
         </div>
         <div style={{display:"flex"}}>
-          {TABS.map(t=>{
-            const active=tab===t.id;
-            return (
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 2px 10px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?aColor:"#6B8AAA",position:"relative",transition:"color 0.18s"}}>
-                {t.ic}
-                <span style={{fontSize:8,fontWeight:active?700:400,letterSpacing:"0.03em",textTransform:"uppercase"}}>{t.l}</span>
-                {active&&<div style={{position:"absolute",bottom:0,left:"10%",right:"10%",height:2,background:aColor,borderRadius:"2px 2px 0 0"}}/>}
-              </button>
-            );
-          })}
+          {TABS.map(t=>{const active=tab===t.id;return(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 2px 10px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?aColor:"#6B8AAA",position:"relative",transition:"color 0.18s"}}>
+              {t.ic}
+              <span style={{fontSize:8,fontWeight:active?700:400,letterSpacing:"0.03em",textTransform:"uppercase"}}>{t.l}</span>
+              {active&&<div style={{position:"absolute",bottom:0,left:"10%",right:"10%",height:2,background:aColor,borderRadius:"2px 2px 0 0"}}/>}
+            </button>
+          );})}
         </div>
       </div>
-
-      {/* Content */}
       <div style={{padding:"18px 14px 80px"}}>
         {tab==="accueil"    &&<AccueilTab favoris={favoris} favorisEvents={favorisEvents} allEvents={allEvents} apparence={apparence}/>}
         {tab==="agenda"     &&<AgendaTab isAdmin={isAdmin} showToast={showToast} allEvents={allEvents} setAllEvents={setAllEvents} onFavorisChange={setFavorisEvents} apparence={apparence}/>}
         {tab==="biblio"     &&<BiblioTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence}/>}
         {tab==="repetition" &&<RepetitionTab isAdmin={isAdmin} showToast={showToast} apparence={apparence}/>}
       </div>
-
-      {/* Modales menu */}
       {modalMenu==="profil"  &&<ModalProfil onClose={()=>setModalMenu(null)} showToast={showToast} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
       {modalMenu==="membres" &&<ModalMembres isAdmin={isAdmin} onClose={()=>setModalMenu(null)} showToast={showToast}/>}
       {modalMenu==="admin"   &&<ModalAdmin onClose={()=>setModalMenu(null)} apparence={apparence} setApparence={setApparence} showToast={showToast}/>}
-      {modalMenu==="connexion"&&(
-        <Modal title="Connexion" onClose={()=>setModalMenu(null)}>
-          <AuthScreen onClose={()=>setModalMenu(null)}/>
-        </Modal>
-      )}
-
+      {modalMenu==="connexion"&&<Modal title="Connexion" onClose={()=>setModalMenu(null)}><AuthScreen onClose={()=>setModalMenu(null)}/></Modal>}
       {toast&&<Toast msg={toast}/>}
     </div>
   );
