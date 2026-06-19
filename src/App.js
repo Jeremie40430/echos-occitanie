@@ -774,16 +774,22 @@ function BiblioTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
   };
 
   // Formulaire fichier avec upload
-  const FF=({init})=>{
-    const did=actif?.id||dossiers[0]?.id;
+	const FF=({init})=>{
+    const did=actif?.id||dossiers[0]?.id||null;
     const [f,setF]=useState(init||{dossier_id:did,nom:"",type:"audio",url:"",taille:""});
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=async()=>{
-      if(!f.nom||!f.url) return;
-      const payload={morceau_id:f.dossier_id,nom:f.nom,type:f.type,url:f.url,taille:f.taille||"",favori:f.favori||false};
-      if(f.id){await supabase.from("fichiers").update(payload).eq("id",f.id);}
-      else{await supabase.from("fichiers").insert([payload]);}
-      showToast("Fichier ajouté ✓");setModal(null);load();
+	const save=async()=>{
+	if(!f.nom||!f.url||!f.dossier_id) { alert("Champs manquants : nom="+f.nom+" url="+f.url+" dossier="+f.dossier_id); return; }
+	const payload={morceau_id:f.dossier_id,nom:f.nom,type:f.type,url:f.url,taille:f.taille||"",favori:f.favori||false};
+	if(f.id){
+    const{error}=await supabase.from("fichiers").update(payload).eq("id",f.id);
+    if(error){alert("Erreur update: "+error.message);return;}
+  } else {
+    const{error}=await supabase.from("fichiers").insert([payload]);
+    if(error){alert("Erreur insert: "+error.message);return;}
+  }
+  showToast("Fichier ajouté ✓");setModal(null);load();
+};
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau fichier"} onClose={()=>setModal(null)}>
