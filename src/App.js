@@ -955,7 +955,6 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
 
   if(loading) return <Spinner/>;
 
-  // Niveau 1 : dossiers principaux
   if(!actif) return (
     <>
       <DossierGrid
@@ -968,7 +967,6 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
   const dData=dossiers.find(x=>x.id===actif.id);
   if(!dData) return null;
 
-  // Niveau 2 : séances
   if(!sousActif) return (
     <>
       <Breadcrumb items={[`${dData.emoji} ${dData.nom}`]} onBack={()=>{setActif(null);setModal(null);}}/>
@@ -994,7 +992,6 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
     </>
   );
 
-  // Niveau 3 : notes
   const sd=(dData.sousDossiers||[]).find(x=>x.id===sousActif.id);
   if(!sd) return null;
 
@@ -1044,35 +1041,58 @@ function RepetitionTab({isAdmin,showToast,apparence}) {
   );
 }
 
-// ── AUTH ──────────────────────────────────────────────────────────
-function AuthScreen({onSimulateAdmin}) {
+// ── AUTH — EMAIL + MOT DE PASSE (plus de magic link) ──────────────
+function AuthScreen({onClose}) {
   const [email,setEmail] = useState("");
-  const [sent,setSent] = useState(false);
+  const [password,setPassword] = useState("");
+  const [error,setError] = useState("");
   const [loading,setLoading] = useState(false);
-  const login=async()=>{
-    if(!email) return;
+
+  const login = async() => {
+    if(!email||!password) return;
     setLoading(true);
-    await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin}});
-    setSent(true); setLoading(false);
+    setError("");
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    if(err) {
+      setError("Email ou mot de passe incorrect.");
+    }
+    setLoading(false);
   };
+
   return (
     <div style={{minHeight:"100vh",background:C.parchemin,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
       <TrompeLogo size={56} color={C.secondary}/>
       <div style={{fontFamily:"'Playfair Display',serif",color:C.primary,fontSize:22,fontWeight:700,marginTop:16,textAlign:"center"}}>Les Échos d'Occitanie</div>
       <div style={{color:C.grisChaud,fontSize:12,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:36}}>Groupe de Trompe de Chasse</div>
-      {!sent?(
-        <div style={{width:"100%",maxWidth:320}}>
-          <div style={{fontSize:13,color:C.primary,marginBottom:10,fontWeight:600}}>Connexion par email</div>
-          <input type="email" placeholder="ton@email.fr" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={{...S.input}}/>
-          <button onClick={login} disabled={loading} style={S.btnP}>{loading?"Envoi…":"Recevoir le lien de connexion"}</button>
-        </div>
-      ):(
-        <div style={{textAlign:"center",maxWidth:280}}>
-          <div style={{fontSize:40,marginBottom:12}}>📬</div>
-          <div style={{fontWeight:700,color:C.primary,fontSize:15,marginBottom:8}}>Lien envoyé !</div>
-          <div style={{fontSize:13,color:C.grisChaud,lineHeight:1.6}}>Consulte ta boîte mail et clique sur le lien pour accéder à l'application.</div>
-        </div>
-      )}
+      <div style={{width:"100%",maxWidth:320}}>
+        <label style={S.label}>Email</label>
+        <input
+          type="email"
+          placeholder="ton@email.fr"
+          value={email}
+          onChange={e=>setEmail(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&login()}
+          style={S.input}
+        />
+        <label style={S.label}>Mot de passe</label>
+        <input
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={e=>setPassword(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&login()}
+          style={S.input}
+        />
+        {error&&(
+          <div style={{background:C.rougeClair,border:`1px solid ${C.secondary}40`,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.secondary,marginBottom:10}}>
+            {error}
+          </div>
+        )}
+        <button onClick={login} disabled={loading} style={S.btnP}>
+          {loading?"Connexion…":"Se connecter"}
+        </button>
+        {onClose&&<button onClick={onClose} style={S.btnS}>Annuler</button>}
+      </div>
     </div>
   );
 }
@@ -1101,7 +1121,6 @@ export default function App() {
     iconeConcert:"🎶",iconeConcours:"🏆",iconeStage:"🌲",iconeRepetition:"🎺",
   });
 
-  // Auth
   useEffect(()=>{
     supabase.auth.getSession().then(({data})=>{
       setSession(data.session);
@@ -1120,7 +1139,6 @@ export default function App() {
     if(data){setIsAdmin(data.is_admin||false);setCurrentUser(data);}
   };
 
-  // Load events
   useEffect(()=>{
     supabase.from("evenements").select("*").order("date").then(({data})=>{
       const evs=data||[];
@@ -1129,7 +1147,6 @@ export default function App() {
     });
   },[]);
 
-  // Load apparence
   useEffect(()=>{
     supabase.from("apparence").select("*").eq("id",1).single().then(({data})=>{
       if(data) setApparenceState({
@@ -1155,11 +1172,7 @@ export default function App() {
     setModalMenu(id);
   };
 
-  // App accessible sans connexion
   if(session===undefined) return <div style={{minHeight:"100vh",background:C.parchemin}}/>;
-
-  // Ecran de connexion UNIQUEMENT si on clique sur "Connexion admin" depuis le menu
-  // L'app est accessible à tous sans login
 
   const initials=currentUser?`${currentUser.prenom[0]}${currentUser.nom[0]}`:"👤";
   const hColor=apparence.headerColor||C.primary;
@@ -1213,12 +1226,8 @@ export default function App() {
       {modalMenu==="membres" &&<ModalMembres isAdmin={isAdmin} onClose={()=>setModalMenu(null)} showToast={showToast}/>}
       {modalMenu==="admin"   &&<ModalAdmin onClose={()=>setModalMenu(null)} apparence={apparence} setApparence={setApparence} showToast={showToast}/>}
       {modalMenu==="connexion"&&(
-        <Modal title="Connexion admin" onClose={()=>setModalMenu(null)}>
-          <div style={{textAlign:"center",marginBottom:20}}>
-            <div style={{fontSize:40,marginBottom:8}}>🔑</div>
-            <div style={{fontSize:13,color:C.grisChaud,lineHeight:1.6}}>Entrez votre email pour recevoir un lien de connexion. Réservé aux administrateurs.</div>
-          </div>
-          <AuthScreen/>
+        <Modal title="Connexion" onClose={()=>setModalMenu(null)}>
+          <AuthScreen onClose={()=>setModalMenu(null)}/>
         </Modal>
       )}
 
