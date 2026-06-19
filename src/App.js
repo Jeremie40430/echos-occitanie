@@ -784,19 +784,35 @@ function AgendaTab({ isAdmin, showToast, onFavorisChange, allEvents, setAllEvent
 
 // ── BIBLIO ────────────────────────────────────────────────────────
 function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
-  const [dossiers, setDossiers] = useState(BIBLIO_D);
-  const [fichiers, setFichiers] = useState(BIBLIO_F);
+  const [dossiers, setDossiers] = useState([]);
+  const [fichiers, setFichiers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [actif, setActif] = useState(null);
   const [playing, setPlaying] = useState(null);
   const [modal, setModal] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const ap = apparence;
 
+  const loadData = useCallback(async () => {
+    const [{ data: d }, { data: f }] = await Promise.all([
+      supabase.from("dossiers").select("*").eq("categorie","biblio").order("ordre"),
+      supabase.from("fichiers").select("*"),
+    ]);
+    setDossiers(d||[]);
+    const mapped = (f||[]).map(x => ({ ...x, dossier_id: x.morceau_id||x.dossier_id }));
+    setFichiers(mapped);
+    setFavoris(mapped.filter(x=>x.favori));
+    setLoading(false);
+  }, [setFavoris]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
   const EMOJIS = ["🎺","🎵","🎹","🎛","📄","📁","🏆","🎶"];
   const COLS   = [C.primary, C.secondary, C.bleuMoyen, "#4527A0","#8B0000","#333"];
 
-  const toggleFav = (f) => {
+  const toggleFav = async (f) => {
     const nv = !f.favori;
+    await supabase.from("fichiers").update({ favori: nv }).eq("id", f.id);
     setFichiers(fs=>fs.map(x=>x.id===f.id?{...x,favori:nv}:x));
     if(nv) setFavoris(prev=>[...prev,{...f,favori:true}]);
     else   setFavoris(prev=>prev.filter(x=>x.id!==f.id));
@@ -806,10 +822,14 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
   const DF = ({ init }) => {
     const [f, setF] = useState(init||{ nom:"", emoji:"📁", color:C.primary });
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=()=>{
+    const save = async () => {
       if(!f.nom) return;
-      if(f.id) setDossiers(d=>d.map(x=>x.id===f.id?f:x)); else setDossiers(d=>[...d,{...f,id:Date.now()}]);
-      showToast(f.id?"Modifié ✓":"Dossier créé ✓"); setModal(null);
+      if(f.id) {
+        await supabase.from("dossiers").update({ nom:f.nom, emoji:f.emoji, color:f.color }).eq("id",f.id);
+      } else {
+        await supabase.from("dossiers").insert([{ nom:f.nom, emoji:f.emoji, color:f.color, categorie:"biblio", ordre:dossiers.length+1 }]);
+      }
+      showToast(f.id?"Modifié ✓":"Dossier créé ✓"); setModal(null); loadData();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau dossier"} onClose={()=>setModal(null)}>
@@ -832,10 +852,15 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
     const did = actif?.id||dossiers[0]?.id;
     const [f, setF] = useState(init||{ dossier_id:did, nom:"", type:"audio", url:"", taille:"" });
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=()=>{
+    const save = async () => {
       if(!f.nom) return;
-      if(f.id) setFichiers(fs=>fs.map(x=>x.id===f.id?f:x)); else setFichiers(fs=>[...fs,{...f,id:Date.now(),favori:false}]);
-      showToast("Fichier ajouté ✓"); setModal(null);
+      const payload = { morceau_id: f.dossier_id, nom: f.nom, type: f.type, url: f.url, taille: f.taille, favori: f.favori||false };
+      if(f.id) {
+        await supabase.from("fichiers").update(payload).eq("id",f.id);
+      } else {
+        await supabase.from("fichiers").insert([payload]);
+      }
+      showToast("Fichier ajouté ✓"); setModal(null); loadData();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau fichier"} onClose={()=>setModal(null)}>
@@ -864,6 +889,7 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
         onEdit={d=>setModal({t:"dossier",data:d})}
         onDelete={d=>setConfirm({id:d.id,t:"dossier",msg:`Supprimer "${d.nom}" ?`})}
       />
+      }
       {isAdmin && <BtnPlus onClick={()=>setModal({t:"choix"})}/>}
       {modal?.t==="choix" && (
         <Modal title="Ajouter…" onClose={()=>setModal(null)}>
@@ -878,11 +904,11 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
       {modal?.t==="dossier" && !modal.data && <DF init={null}/>}
       {modal?.t==="dossier" && modal.data && <DF init={modal.data}/>}
       {modal?.t==="fichier" && <FF init={null}/>}
-      {confirm && <Confirm msg={confirm.msg} onConfirm={()=>{setDossiers(d=>d.filter(x=>x.id!==confirm.id));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
+      {confirm && <Confirm msg={confirm.msg} onConfirm={async()=>{ await supabase.from("dossiers").delete().eq("id",confirm.id); showToast("Supprimé ✓"); setConfirm(null); loadData(); }} onClose={()=>setConfirm(null)}/>}
     </>
   );
 
-  const contenu = fichiers.filter(f=>f.dossier_id===actif.id);
+  const contenu = fichiers.filter(f=>(f.dossier_id||f.morceau_id)===actif.id);
   return (
     <>
       <Breadcrumb items={[`${actif.emoji} ${actif.nom}`]} onBack={()=>setActif(null)}/>
@@ -894,20 +920,39 @@ function BiblioTab({ isAdmin, showToast, favoris, setFavoris, apparence={} }) {
       })}
       {isAdmin && <BtnPlus onClick={()=>setModal({t:"fichier"})}/>}
       {modal?.t==="fichier" && <FF init={modal.data||{dossier_id:actif.id,nom:"",type:"audio",url:"",taille:""}}/>}
-      {confirm && <Confirm msg={confirm.msg} onConfirm={()=>{setFichiers(f=>f.filter(x=>x.id!==confirm.id));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
+      {confirm && <Confirm msg={confirm.msg} onConfirm={async()=>{ await supabase.from("fichiers").delete().eq("id",confirm.id); showToast("Supprimé ✓"); setConfirm(null); loadData(); }} onClose={()=>setConfirm(null)}/>}
     </>
   );
 }
 
 // ── RÉPÉTITION ────────────────────────────────────────────────────
 function RepetitionTab({ isAdmin, showToast, apparence={} }) {
-  const [dossiers, setDossiers] = useState(REP_D);
+  const [dossiers, setDossiers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [actif, setActif] = useState(null);
   const [sousActif, setSousActif] = useState(null);
   const [openNote, setOpenNote] = useState(null);
   const [modal, setModal] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const ap = apparence;
+
+  const loadDossiers = useCallback(async () => {
+    const { data: ds } = await supabase.from("dossiers").select("*").eq("categorie","repetition").order("ordre");
+    if(!ds) { setLoading(false); return; }
+    // Load sous_dossiers and notes for each dossier
+    const withSubs = await Promise.all(ds.map(async d => {
+      const { data: sds } = await supabase.from("sous_dossiers").select("*").eq("dossier_id", d.id).order("date", { ascending:false });
+      const sousDossiers = await Promise.all((sds||[]).map(async sd => {
+        const { data: ns } = await supabase.from("notes").select("*").eq("sous_dossier_id", sd.id).order("created_at", { ascending:false });
+        return { ...sd, notes: ns||[] };
+      }));
+      return { ...d, sousDossiers };
+    }));
+    setDossiers(withSubs);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadDossiers(); }, [loadDossiers]);
 
   const SDF = ({ init, dossierId }) => {
     const [f, setF] = useState(init||{ nom:"", date:new Date().toISOString().split("T")[0] });
@@ -916,12 +961,12 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
     const auto = f.date ? `${dData?.id==="dm"?"Séance":"Répétition"} ${new Date(f.date).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}` : "";
     const save=()=>{
       const nom = f.nom||auto; if(!nom) return;
-      setDossiers(ds=>ds.map(d=>{
-        if(d.id!==dossierId) return d;
-        if(f.id) return {...d,sousDossiers:d.sousDossiers.map(s=>s.id===f.id?{...s,nom,date:f.date}:s)};
-        return {...d,sousDossiers:[{id:Date.now().toString(),nom,date:f.date,notes:[]},...d.sousDossiers]};
-      }));
-      showToast("Dossier créé ✓"); setModal(null);
+      if(f.id) {
+        await supabase.from("sous_dossiers").update({ nom, date:f.date }).eq("id", f.id);
+      } else {
+        await supabase.from("sous_dossiers").insert([{ dossier_id: dossierId, nom, date:f.date }]);
+      }
+      showToast("Dossier créé ✓"); setModal(null); loadDossiers();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau dossier"} onClose={()=>setModal(null)}>
@@ -939,15 +984,13 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
     const save=()=>{
       if(!f.titre||!f.contenu) return;
-      setDossiers(ds=>ds.map(d=>{
-        if(d.id!==dossierId) return d;
-        return {...d,sousDossiers:d.sousDossiers.map(sd=>{
-          if(sd.id!==sdId) return sd;
-          if(f.id) return {...sd,notes:sd.notes.map(n=>n.id===f.id?f:n)};
-          return {...sd,notes:[{...f,id:Date.now()},...sd.notes]};
-        })};
-      }));
-      showToast(f.id?"Modifié ✓":"Publié ✓"); setModal(null);
+      const payload = { titre:f.titre, contenu:f.contenu, type:f.type||"texte", duree:f.duree||"", favori:f.favori||false };
+      if(f.id) {
+        await supabase.from("notes").update(payload).eq("id", f.id);
+      } else {
+        await supabase.from("notes").insert([{ ...payload, sous_dossier_id: sdId }]);
+      }
+      showToast(f.id?"Modifié ✓":"Publié ✓"); setModal(null); loadDossiers();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouvelle note"} onClose={()=>setModal(null)}>
@@ -961,7 +1004,8 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
   };
 
   // Niveau 1
-  if(!actif) return <DossierGrid dossiers={dossiers.map(d=>({...d,count:d.sousDossiers.length,countLabel:"séance(s)"}))} onOpen={setActif} isAdmin={false}/>;
+  if(loading) return <Spinner/>;
+  if(!actif) return <DossierGrid dossiers={dossiers.map(d=>({...d,count:(d.sousDossiers||[]).length,countLabel:"séance(s)"}))} onOpen={setActif} isAdmin={false}/>;
 
   const dData = dossiers.find(x=>x.id===actif.id);
 
@@ -969,8 +1013,8 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
   if(!sousActif) return (
     <>
       <Breadcrumb items={[`${dData.emoji} ${dData.nom}`]} onBack={()=>setActif(null)}/>
-      {dData.sousDossiers.length===0 && <div style={{ color:C.grisChaud, fontSize:13 }}>Aucune séance — bouton + pour en créer une.</div>}
-      {dData.sousDossiers.map(sd => (
+      {(dData.sousDossiers||[]).length===0 && <div style={{ color:C.grisChaud, fontSize:13 }}>Aucune séance — bouton + pour en créer une.</div>}
+      {(dData.sousDossiers||[]).map(sd => (
         <div key={sd.id} onClick={()=>setSousActif(sd)} style={{ ...S.card, cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:44, height:44, borderRadius:10, background:dData.color+"20", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0, border:`1px solid ${dData.color}30` }}>📁</div>
           <div style={{ flex:1 }}>
@@ -992,10 +1036,12 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
   );
 
   // Niveau 3
-  const sd = dData.sousDossiers.find(x=>x.id===sousActif.id);
-  const toggleFavRep = (n) => {
-    setDossiers(ds=>ds.map(d=>d.id!==actif.id?d:{...d,sousDossiers:d.sousDossiers.map(s=>s.id!==sd.id?s:{...s,notes:s.notes.map(x=>x.id===n.id?{...x,favori:!x.favori}:x)})}));
-    showToast(!n.favori?"⭐ Ajouté aux favoris":"Retiré des favoris");
+  const sd = (dData.sousDossiers||[]).find(x=>x.id===sousActif.id);
+  const toggleFavRep = async (n) => {
+    const nv = !n.favori;
+    await supabase.from("notes").update({ favori: nv }).eq("id", n.id);
+    showToast(nv?"⭐ Ajouté aux favoris":"Retiré des favoris");
+    loadDossiers();
   };
 
   return (
@@ -1032,7 +1078,7 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
       })}
       {isAdmin && <BtnPlus onClick={()=>setModal({t:"note"})}/>}
       {modal?.t==="note" && <NF init={modal.data||null} dossierId={actif.id} sdId={sd.id}/>}
-      {confirm?.noteId && <Confirm msg={confirm.msg} onConfirm={()=>{setDossiers(ds=>ds.map(d=>d.id!==confirm.dossierId?d:{...d,sousDossiers:d.sousDossiers.map(s=>s.id!==confirm.sdId?s:{...s,notes:s.notes.filter(n=>n.id!==confirm.noteId)})}));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
+      {confirm?.noteId && <Confirm msg={confirm.msg} onConfirm={async()=>{ await supabase.from("notes").delete().eq("id",confirm.noteId); showToast("Supprimé ✓"); setConfirm(null); loadDossiers(); }} onClose={()=>setConfirm(null)}/>}
     </>
   );
 }
