@@ -173,7 +173,7 @@ const FileCard = ({ nom, taille, url, typeLabel, onEdit, onDelete, isAdmin }) =>
 );
 
 // ── Menu déroulant ────────────────────────────────────────────────
-function MenuDeroulant({ isAdmin, onNav, onClose }) {
+function MenuDeroulant({ isAdmin, onNav, onClose, currentUser }) {
   const ref = useRef(null);
   useEffect(() => {
     const h = (e) => { if(ref.current && !ref.current.contains(e.target)) onClose(); };
@@ -581,6 +581,57 @@ function AccueilTab({ favoris, favorisEvents=[], allEvents=EVENTS, apparence={} 
   );
 }
 
+
+// ── PalmaresCard ─────────────────────────────────────────────────
+function PalmaresCard({ ev, i, isAdmin, ap, events, setEvents, showToast, setModal, setConfirm }) {
+  const [editNote, setEditNote] = useState(false);
+  return (
+<div key={ev.id} style={{ ...S.card, borderLeft:`4px solid ${i===0?C.secondary:"#D4C9B0"}` }}>
+                <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:10 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:"'Playfair Display', serif", fontWeight:700, color:C.primary, fontSize:14 }}>{ev.titre}</div>
+                    <div style={{ fontSize:11, color:C.grisChaud }}>{fds(ev.date)} · {ev.lieu}</div>
+                  </div>
+                  {i===0 && <span style={{ ...S.badge, background:C.rougeClair, color:C.secondary }}>Dernier</span>}
+                  {isAdmin && <AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+                  {ev.placeGlobale && (
+                    <div style={{ display:"flex", alignItems:"center", gap:10, background:C.rougeClair, borderRadius:8, padding:"7px 12px" }}>
+                      {ap.iconeGlobal && <span style={{ fontSize:18 }}>{ap.iconeGlobal}</span>}
+                      <div><div style={{ fontSize:10, color:C.grisChaud, textTransform:"uppercase" }}>Classement général</div><div style={{ fontWeight:700, color:C.secondary, fontSize:14 }}>{ev.placeGlobale} prix</div></div>
+                    </div>
+                  )}
+                  {ev.placeRadoux && (
+                    <div style={{ display:"flex", alignItems:"center", gap:10, background:C.bleuClair, borderRadius:8, padding:"7px 12px" }}>
+                      {ap.iconeRadoux && <span style={{ fontSize:18 }}>{ap.iconeRadoux}</span>}
+                      <div><div style={{ fontSize:10, color:C.grisChaud, textTransform:"uppercase" }}>Radoux</div><div style={{ fontWeight:700, color:C.primary, fontSize:14 }}>{ev.placeRadoux} prix</div></div>
+                    </div>
+                  )}
+                  {ev.placeBasse && (
+                    <div style={{ display:"flex", alignItems:"center", gap:10, background:"#EDE7F6", borderRadius:8, padding:"7px 12px" }}>
+                      {ap.iconeBasse && <span style={{ fontSize:18 }}>{ap.iconeBasse}</span>}
+                      <div><div style={{ fontSize:10, color:C.grisChaud, textTransform:"uppercase" }}>Basse</div><div style={{ fontWeight:700, color:"#4527A0", fontSize:14 }}>{ev.placeBasse} prix</div></div>
+                    </div>
+                  )}
+                </div>
+                {isAdmin && !editNote && (
+                  <button onClick={()=>setEditNote(true)} style={{ background:"none", border:"1px dashed #D4C9B0", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, color:C.grisChaud, width:"100%", textAlign:"left" }}>
+                    {ev.noteAdmin||"＋ Ajouter une note (visible sur l'accueil)"}
+                  </button>
+                )}
+                {isAdmin && editNote && (
+                  <textarea defaultValue={ev.noteAdmin||""} autoFocus placeholder="Note sur ce concours…" style={{ ...S.input, minHeight:70, resize:"vertical", marginBottom:6 }}
+                    onBlur={e=>{setEvents(events.map(x=>x.id===ev.id?{...x,noteAdmin:e.target.value}:x));setEditNote(false);showToast("Note enregistrée ✓");}}
+                  />
+                )}
+                {!isAdmin && ev.noteAdmin && (
+                  <div style={{ fontSize:13, color:C.primary, fontStyle:"italic", paddingTop:8, borderTop:"1px solid #E8E0D0" }}>{ev.noteAdmin}</div>
+                )}
+              </div>
+  );
+}
+
 // ── AGENDA ────────────────────────────────────────────────────────
 function AgendaTab({ isAdmin, showToast, onFavorisChange, allEvents, setAllEvents, apparence={} }) {
   const events = allEvents||EVENTS;
@@ -682,54 +733,9 @@ function AgendaTab({ isAdmin, showToast, onFavorisChange, allEvents, setAllEvent
 
       {subTab==="palmares" ? (
         <div>
-          {list.map((ev, i) => {
-            const [editNote, setEditNote] = useState(false);
-            return (
-              <div key={ev.id} style={{ ...S.card, borderLeft:`4px solid ${i===0?C.secondary:"#D4C9B0"}` }}>
-                <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:10 }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontFamily:"'Playfair Display', serif", fontWeight:700, color:C.primary, fontSize:14 }}>{ev.titre}</div>
-                    <div style={{ fontSize:11, color:C.grisChaud }}>{fds(ev.date)} · {ev.lieu}</div>
-                  </div>
-                  {i===0 && <span style={{ ...S.badge, background:C.rougeClair, color:C.secondary }}>Dernier</span>}
-                  {isAdmin && <AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
-                  {ev.placeGlobale && (
-                    <div style={{ display:"flex", alignItems:"center", gap:10, background:C.rougeClair, borderRadius:8, padding:"7px 12px" }}>
-                      {ap.iconeGlobal && <span style={{ fontSize:18 }}>{ap.iconeGlobal}</span>}
-                      <div><div style={{ fontSize:10, color:C.grisChaud, textTransform:"uppercase" }}>Classement général</div><div style={{ fontWeight:700, color:C.secondary, fontSize:14 }}>{ev.placeGlobale} prix</div></div>
-                    </div>
-                  )}
-                  {ev.placeRadoux && (
-                    <div style={{ display:"flex", alignItems:"center", gap:10, background:C.bleuClair, borderRadius:8, padding:"7px 12px" }}>
-                      {ap.iconeRadoux && <span style={{ fontSize:18 }}>{ap.iconeRadoux}</span>}
-                      <div><div style={{ fontSize:10, color:C.grisChaud, textTransform:"uppercase" }}>Radoux</div><div style={{ fontWeight:700, color:C.primary, fontSize:14 }}>{ev.placeRadoux} prix</div></div>
-                    </div>
-                  )}
-                  {ev.placeBasse && (
-                    <div style={{ display:"flex", alignItems:"center", gap:10, background:"#EDE7F6", borderRadius:8, padding:"7px 12px" }}>
-                      {ap.iconeBasse && <span style={{ fontSize:18 }}>{ap.iconeBasse}</span>}
-                      <div><div style={{ fontSize:10, color:C.grisChaud, textTransform:"uppercase" }}>Basse</div><div style={{ fontWeight:700, color:"#4527A0", fontSize:14 }}>{ev.placeBasse} prix</div></div>
-                    </div>
-                  )}
-                </div>
-                {isAdmin && !editNote && (
-                  <button onClick={()=>setEditNote(true)} style={{ background:"none", border:"1px dashed #D4C9B0", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, color:C.grisChaud, width:"100%", textAlign:"left" }}>
-                    {ev.noteAdmin||"＋ Ajouter une note (visible sur l'accueil)"}
-                  </button>
-                )}
-                {isAdmin && editNote && (
-                  <textarea defaultValue={ev.noteAdmin||""} autoFocus placeholder="Note sur ce concours…" style={{ ...S.input, minHeight:70, resize:"vertical", marginBottom:6 }}
-                    onBlur={e=>{const val=e.target.value; supabase.from("evenements").update({note_admin:val}).eq("id",ev.id).then(()=>{ setEvents(events.map(x=>x.id===ev.id?{...x,noteAdmin:val}:x));setEditNote(false);showToast("Note enregistrée ✓"); });}}
-                  />
-                )}
-                {!isAdmin && ev.noteAdmin && (
-                  <div style={{ fontSize:13, color:C.primary, fontStyle:"italic", paddingTop:8, borderTop:"1px solid #E8E0D0" }}>{ev.noteAdmin}</div>
-                )}
-              </div>
-            );
-          })}
+          {list.map((ev, i) => (
+            <PalmaresCard key={ev.id} ev={ev} i={i} isAdmin={isAdmin} ap={ap} events={events} setEvents={setEvents} showToast={showToast} setModal={setModal} setConfirm={setConfirm}/>
+          ))}
         </div>
       ) : (
         <div>
@@ -1188,7 +1194,7 @@ export default function App() {
             <button onClick={()=>setMenuOpen(o=>!o)} style={{ background:apparence.accentColor||C.secondary, border:"none", cursor:"pointer", width:34, height:34, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:700, fontSize:13, fontFamily:"'Playfair Display', serif" }}>
               {currentUser ? `${currentUser.prenom[0]}${currentUser.nom[0]}` : "?"}
             </button>
-            {menuOpen && <MenuDeroulant isAdmin={isAdmin} onNav={handleMenu} onClose={()=>setMenuOpen(false)}/>}
+            {menuOpen && <MenuDeroulant isAdmin={isAdmin} onNav={handleMenu} onClose={()=>setMenuOpen(false)} currentUser={currentUser}/>}
           </div>
         </div>
         <div style={{ display:"flex" }}>
