@@ -295,7 +295,6 @@ function ModalMembres({ isAdmin, onClose, showToast }) {
             {m.adresse && <div style={{ marginTop:6, paddingTop:6, borderTop:"1px solid #E8E0D0" }}><a href={`https://maps.google.com/?q=${encodeURIComponent(m.adresse)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:10, color:C.secondary, textDecoration:"none" }}>📍 {m.adresse}</a></div>}
           </div>
         ))}
-      </div>
       </div>}
       {isAdmin && <button style={S.btnP} onClick={()=>setModal({new:true})}>+ Ajouter un membre</button>}
       {modal && !modal.new && <Form init={modal}/>}
