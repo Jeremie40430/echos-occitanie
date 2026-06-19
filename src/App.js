@@ -959,7 +959,7 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
     const dData = dossiers.find(x=>x.id===dossierId);
     const auto = f.date ? `${dData?.id==="dm"?"Séance":"Répétition"} ${new Date(f.date).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}` : "";
-    const save=()=>{
+    const save = async () => {
       const nom = f.nom||auto; if(!nom) return;
       if(f.id) {
         await supabase.from("sous_dossiers").update({ nom, date:f.date }).eq("id", f.id);
@@ -982,7 +982,7 @@ function RepetitionTab({ isAdmin, showToast, apparence={} }) {
   const NF = ({ init, dossierId, sdId }) => {
     const [f, setF] = useState(init||{ titre:"", contenu:"" });
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=()=>{
+    const save = async () => {
       if(!f.titre||!f.contenu) return;
       const payload = { titre:f.titre, contenu:f.contenu, type:f.type||"texte", duree:f.duree||"", favori:f.favori||false };
       if(f.id) {
