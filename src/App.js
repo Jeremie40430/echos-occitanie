@@ -153,7 +153,7 @@ const PdfCard = ({ nom, taille, url, onEdit, onDelete, isAdmin }) => (
       <div style={{ fontFamily:"'Playfair Display', serif", fontWeight:700, color:C.primary, fontSize:13, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{nom}</div>
       <div style={{ fontSize:11, color:C.grisChaud, marginTop:2 }}>{taille}</div>
     </div>
-    {url && url!="#" && <a href={url} target="_blank" rel="noopener noreferrer" style={{ padding:"5px 10px", borderRadius:8, background:C.bleuClair, color:C.primary, fontSize:11, fontWeight:700, textDecoration:"none", flexShrink:0 }}>⬇ PDF</a>}
+    {url && url!=="#" && <a href={url} target="_blank" rel="noopener noreferrer" style={{ padding:"5px 10px", borderRadius:8, background:C.bleuClair, color:C.primary, fontSize:11, fontWeight:700, textDecoration:"none", flexShrink:0 }}>⬇ PDF</a>}
     {isAdmin && <AA onEdit={onEdit} onDelete={onDelete}/>}
   </div>
 );
@@ -167,7 +167,7 @@ const FileCard = ({ nom, taille, url, typeLabel, onEdit, onDelete, isAdmin }) =>
       <div style={{ fontFamily:"'Playfair Display', serif", fontWeight:700, color:C.primary, fontSize:13, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{nom}</div>
       <div style={{ fontSize:11, color:C.grisChaud, marginTop:2 }}>{typeLabel} · {taille}</div>
     </div>
-    {url && url!="#" && <a href={url} target="_blank" rel="noopener noreferrer" style={{ padding:"5px 10px", borderRadius:8, background:"#E8E0D0", color:C.grisChaud, fontSize:11, fontWeight:700, textDecoration:"none", flexShrink:0 }}>⬇</a>}
+    {url && url!=="#" && <a href={url} target="_blank" rel="noopener noreferrer" style={{ padding:"5px 10px", borderRadius:8, background:"#E8E0D0", color:C.grisChaud, fontSize:11, fontWeight:700, textDecoration:"none", flexShrink:0 }}>⬇</a>}
     {isAdmin && <AA onEdit={onEdit} onDelete={onDelete}/>}
   </div>
 );
