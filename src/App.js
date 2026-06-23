@@ -1018,6 +1018,140 @@ function MembresTab({isAdmin,showToast,currentUser,setCurrentUser}) {
   );
 }
 
+// ── MODAL ADMIN ────────────────────────────────────────────────────
+function ModalAdmin({onClose,apparence,setApparence,showToast}) {
+  const [page,setPage] = useState(null);
+  const [local,setLocal] = useState({...apparence});
+  const s=(k,v)=>setLocal(a=>({...a,[k]:v}));
+
+  const save = async() => {
+    setApparence(local);
+    await supabase.from("apparence").upsert({
+      id:1,
+      bulle_color:local.bulleColor, bulle_icon:local.bulleIcon,
+      header_color:local.headerColor, accent_color:local.accentColor,
+      nom_groupe:local.nomGroupe||"", sous_titre:local.sousTitre||"", logo_url:local.logoUrl||"",
+    });
+    showToast("Enregistré ✓"); setPage(null);
+  };
+
+  const COLS_HEADER=[{v:"#1A1F6E",l:"Bleu marine"},{v:"#C8102E",l:"Rouge"},{v:"#1B2A1A",l:"Vert forêt"},{v:"#212121",l:"Noir"},{v:"#4A148C",l:"Violet"}];
+  const COLS_ACCENT=[{v:"#C8102E",l:"Rouge"},{v:"#C8860A",l:"Or"},{v:"#3949AB",l:"Bleu"},{v:"#7B1FA2",l:"Violet"},{v:"#E65100",l:"Orange"}];
+  const COLS_BULLE=[{v:"#C8102E",l:"Rouge"},{v:"#1A1F6E",l:"Bleu"},{v:"#3949AB",l:"Bleu clair"},{v:"#7B1FA2",l:"Violet"},{v:"#1B5E20",l:"Vert"},{v:"#212121",l:"Noir"}];
+  const ICONS_BULLE=["▶","🎶","🎵","🎺","♪","🔊",""];
+
+  const ColorRow = ({options,k}) => (
+    <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:18}}>
+      {options.map(o=>(
+        <div key={o.v} onClick={()=>s(k,o.v)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer"}}>
+          <div style={{width:38,height:38,borderRadius:"50%",background:o.v,border:local[k]===o.v?"3px solid #333":"2px solid #D4C9B0"}}/>
+          <span style={{fontSize:9,color:C.grisChaud}}>{o.l}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  const MENU=[
+    {id:"identite", e:"🏷️", l:"Identité du groupe", d:"Nom, sous-titre, logo"},
+    {id:"couleurs", e:"🎨", l:"Couleurs",            d:"Header, accent, boutons"},
+    {id:"audio",    e:"🔴", l:"Lecteur audio",       d:"Couleur et icône du bouton play"},
+  ];
+
+  if(!page) return (
+    <Modal title="Paramètres admin" onClose={onClose}>
+      {MENU.map(item=>(
+        <div key={item.id} onClick={()=>setPage(item.id)} style={{...S.card,display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginBottom:8}}>
+          <span style={{fontSize:22}}>{item.e}</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600,color:C.primary,fontSize:13}}>{item.l}</div>
+            <div style={{fontSize:11,color:C.grisChaud}}>{item.d}</div>
+          </div>
+          <span style={{color:C.grisChaud,fontSize:18}}>›</span>
+        </div>
+      ))}
+      <button style={S.btnS} onClick={onClose}>Fermer</button>
+    </Modal>
+  );
+
+  if(page==="identite") return (
+    <Modal title="Identité du groupe" onClose={()=>setPage(null)}>
+      {/* Aperçu */}
+      <div style={{background:local.headerColor||C.primary,borderRadius:12,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+        {local.logoUrl
+          ? <img src={local.logoUrl} alt="logo" style={{width:36,height:36,borderRadius:8,objectFit:"cover"}}/>
+          : <TrompeLogo size={36} color={local.accentColor||C.secondary}/>
+        }
+        <div>
+          <div style={{color:"#fff",fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14}}>{local.nomGroupe||"Nom du groupe"}</div>
+          <div style={{color:"#A8B8D8",fontSize:10}}>{local.sousTitre||"Sous-titre"}</div>
+        </div>
+      </div>
+
+      <label style={S.label}>Nom du groupe</label>
+      <input style={S.input} value={local.nomGroupe||""} onChange={e=>s("nomGroupe",e.target.value)} placeholder="Ex: Les Echos d'Occitanie"/>
+
+      <label style={S.label}>Sous-titre</label>
+      <input style={S.input} value={local.sousTitre||""} onChange={e=>s("sousTitre",e.target.value)} placeholder="Ex: Trompe de Chasse"/>
+
+      <label style={S.label}>Logo (optionnel)</label>
+      {local.logoUrl&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <img src={local.logoUrl} alt="logo" style={{width:48,height:48,borderRadius:10,objectFit:"cover"}}/>
+          <button onClick={()=>s("logoUrl","")} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"6px 12px",borderRadius:8,color:C.secondary,fontSize:12}}>Supprimer</button>
+        </div>
+      )}
+      <FileUpload
+        label="Choisir un logo"
+        accept="image/*"
+        onUploaded={({url})=>s("logoUrl",url)}
+      />
+
+      <button style={S.btnP} onClick={save}>Enregistrer</button>
+      <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
+    </Modal>
+  );
+
+  if(page==="couleurs") return (
+    <Modal title="Couleurs" onClose={()=>setPage(null)}>
+      <div style={{height:48,borderRadius:10,background:local.headerColor,marginBottom:16,display:"flex",alignItems:"center",paddingLeft:14}}>
+        <span style={{color:"#fff",fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}}>Aperçu header</span>
+      </div>
+      <label style={S.label}>Couleur du header</label>
+      <ColorRow options={COLS_HEADER} k="headerColor"/>
+      <label style={S.label}>Couleur accent</label>
+      <ColorRow options={COLS_ACCENT} k="accentColor"/>
+      <button style={S.btnP} onClick={save}>Enregistrer</button>
+      <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
+    </Modal>
+  );
+
+  if(page==="audio") return (
+    <Modal title="Lecteur audio" onClose={()=>setPage(null)}>
+      <div style={{display:"flex",alignItems:"center",gap:12,background:"#F0F0F0",borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+        <div style={{width:44,height:44,borderRadius:"50%",background:local.bulleColor,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:18,fontWeight:700}}>{local.bulleIcon||"▶"}</div>
+        <div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>La Royale — Aperçu</div>
+          <div style={{fontSize:11,color:C.grisChaud}}>Fanfare</div>
+        </div>
+      </div>
+      <label style={S.label}>Icône</label>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
+        {ICONS_BULLE.map((o,i)=>(
+          <button key={i} onClick={()=>s("bulleIcon",o)} style={{width:52,height:52,borderRadius:10,border:local.bulleIcon===o?`2px solid ${C.secondary}`:"1px solid #D4C9B0",background:local.bulleIcon===o?C.rougeClair:C.blanc,cursor:"pointer",fontSize:o?22:12,color:o?"inherit":C.grisChaud,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {o||"∅"}
+          </button>
+        ))}
+      </div>
+      <label style={S.label}>Couleur</label>
+      <ColorRow options={COLS_BULLE} k="bulleColor"/>
+      <button style={S.btnP} onClick={save}>Enregistrer</button>
+      <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
+    </Modal>
+  );
+
+  return null;
+}
+
 // ── AUTH ───────────────────────────────────────────────────────────
 function AuthScreen({onClose}) {
   const [email,setEmail] = useState("");
@@ -1066,10 +1200,12 @@ export default function App() {
   const [currentUser,setCurrentUser] = useState(null);
   const [toast,setToast] = useState(null);
   const [loginModal,setLoginModal] = useState(false);
+  const [adminModal,setAdminModal] = useState(false);
   const [favoris,setFavoris] = useState([]);
   const [allEvents,setAllEvents] = useState([]);
   const [apparence,setApparenceState] = useState({
-    bulleColor:"#C8102E",bulleIcon:"▶",headerColor:"#1A1F6E",accentColor:"#C8102E",
+    bulleColor:"#C8102E", bulleIcon:"▶", headerColor:"#1A1F6E", accentColor:"#C8102E",
+    nomGroupe:"Les Echos d'Occitanie", sousTitre:"Trompe de Chasse", logoUrl:"",
   });
 
   useEffect(()=>{
@@ -1093,7 +1229,13 @@ export default function App() {
   useEffect(()=>{
     supabase.from("evenements").select("*").order("date").then(({data})=>setAllEvents(data||[]));
     supabase.from("apparence").select("*").eq("id",1).single().then(({data})=>{
-      if(data) setApparenceState({bulleColor:data.bulle_color||"#C8102E",bulleIcon:data.bulle_icon||"▶",headerColor:data.header_color||"#1A1F6E",accentColor:data.accent_color||"#C8102E"});
+      if(data) setApparenceState({
+        bulleColor:data.bulle_color||"#C8102E", bulleIcon:data.bulle_icon||"▶",
+        headerColor:data.header_color||"#1A1F6E", accentColor:data.accent_color||"#C8102E",
+        nomGroupe:data.nom_groupe||"Les Echos d'Occitanie",
+        sousTitre:data.sous_titre||"Trompe de Chasse",
+        logoUrl:data.logo_url||"",
+      });
     });
   },[]);
 
@@ -1112,17 +1254,20 @@ export default function App() {
       <div style={{background:hColor,padding:"14px 16px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <TrompeLogo size={32} color={aColor}/>
+            {apparence.logoUrl
+              ? <img src={apparence.logoUrl} alt="logo" style={{width:32,height:32,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
+              : <TrompeLogo size={32} color={aColor}/>
+            }
             <div>
-              <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:15,fontWeight:700,lineHeight:1.2}}>Les Echos d'Occitanie</div>
-              <div style={{color:"#A8B8D8",fontSize:10,letterSpacing:"0.07em",textTransform:"uppercase"}}>Trompe de Chasse{isAdmin?" · Admin":currentUser?" · Membre":""}</div>
+              <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:15,fontWeight:700,lineHeight:1.2}}>{apparence.nomGroupe}</div>
+              <div style={{color:"#A8B8D8",fontSize:10,letterSpacing:"0.07em",textTransform:"uppercase"}}>{apparence.sousTitre}{isAdmin?" · Admin":currentUser?" · Membre":""}</div>
             </div>
           </div>
           <div>
             {session ? (
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 {isAdmin&&(
-                  <button onClick={()=>{}} style={{background:C.secondary+"33",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:20,color:aColor,fontSize:10,fontWeight:700}}>Admin</button>
+                  <button onClick={()=>setAdminModal(true)} style={{background:C.secondary+"33",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:20,color:aColor,fontSize:10,fontWeight:700}}>Admin</button>
                 )}
                 <button onClick={()=>supabase.auth.signOut()} style={{background:"#ffffff22",border:"none",cursor:"pointer",padding:"6px 12px",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600}}>
                   Déconnexion
@@ -1165,6 +1310,16 @@ export default function App() {
         <Modal title="Connexion" onClose={()=>setLoginModal(false)}>
           <AuthScreen onClose={()=>setLoginModal(false)}/>
         </Modal>
+      )}
+
+      {/* Modal admin */}
+      {adminModal&&(
+        <ModalAdmin
+          onClose={()=>setAdminModal(false)}
+          apparence={apparence}
+          setApparence={(ap)=>{setApparenceState(ap);}}
+          showToast={showToast}
+        />
       )}
 
       {toast&&<Toast msg={toast}/>}
