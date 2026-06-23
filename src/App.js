@@ -1026,12 +1026,18 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
 
   const save = async() => {
     setApparence(local);
-    await supabase.from("apparence").upsert({
-      id:1,
+    const payload = {
       bulle_color:local.bulleColor, bulle_icon:local.bulleIcon,
       header_color:local.headerColor, accent_color:local.accentColor,
       nom_groupe:local.nomGroupe||"", sous_titre:local.sousTitre||"", logo_url:local.logoUrl||"",
-    });
+    };
+    // Tente update d'abord, si rien n'existe on insert
+    const{data:existing} = await supabase.from("apparence").select("id").eq("id",1).single();
+    if(existing) {
+      await supabase.from("apparence").update(payload).eq("id",1);
+    } else {
+      await supabase.from("apparence").insert([{id:1,...payload}]);
+    }
     showToast("Enregistré ✓"); setPage(null);
   };
 
@@ -1321,7 +1327,7 @@ export default function App() {
         <ModalAdmin
           onClose={()=>setAdminModal(false)}
           apparence={apparence}
-          setApparence={(ap)=>{setApparenceState(ap);}}
+          setApparence={(ap)=>setApparenceState(ap)}
           showToast={showToast}
         />
       )}
