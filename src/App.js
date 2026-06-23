@@ -1094,17 +1094,21 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
       <input style={S.input} value={local.sousTitre||""} onChange={e=>s("sousTitre",e.target.value)} placeholder="Ex: Trompe de Chasse"/>
 
       <label style={S.label}>Logo (optionnel)</label>
-      {local.logoUrl&&(
+      {local.logoUrl ? (
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <img src={local.logoUrl} alt="logo" style={{width:48,height:48,borderRadius:10,objectFit:"cover"}}/>
-          <button onClick={()=>s("logoUrl","")} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"6px 12px",borderRadius:8,color:C.secondary,fontSize:12}}>Supprimer</button>
+          <img src={local.logoUrl} alt="logo" style={{width:56,height:56,borderRadius:10,objectFit:"cover",border:"2px solid #D4C9B0"}}/>
+          <div>
+            <div style={{fontSize:11,color:C.vert,marginBottom:6,fontWeight:600}}>Logo prêt</div>
+            <button onClick={()=>s("logoUrl","")} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"6px 12px",borderRadius:8,color:C.secondary,fontSize:12,fontWeight:600}}>Supprimer</button>
+          </div>
         </div>
+      ) : (
+        <FileUpload
+          label="Choisir une image (JPG, PNG…)"
+          accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+          onUploaded={({url})=>s("logoUrl",url)}
+        />
       )}
-      <FileUpload
-        label="Choisir un logo"
-        accept="image/*"
-        onUploaded={({url})=>s("logoUrl",url)}
-      />
 
       <button style={S.btnP} onClick={save}>Enregistrer</button>
       <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
