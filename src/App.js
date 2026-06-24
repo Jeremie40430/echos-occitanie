@@ -266,15 +266,43 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
       )}
 
       {dernierConcours&&(
-        <div style={{...S.card,marginBottom:16}}>
-          <div style={{fontSize:11,color:C.grisChaud,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Dernier concours</div>
-          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:16,marginBottom:2}}>{dernierConcours.titre||"Concours"}</div>
-          <div style={{fontSize:12,color:C.grisChaud,marginBottom:12}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {dernierConcours.place_globale&&<div style={{display:"flex",alignItems:"center",gap:12,background:C.rougeClair,borderRadius:10,padding:"10px 14px"}}><div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Classement général</div><div style={{fontWeight:700,color:C.secondary,fontSize:16}}>{dernierConcours.place_globale} prix</div></div></div>}
-            {dernierConcours.place_radoux&&<div style={{display:"flex",alignItems:"center",gap:12,background:C.bleuClair,borderRadius:10,padding:"10px 14px"}}><div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Radoux</div><div style={{fontWeight:700,color:C.primary,fontSize:16}}>{dernierConcours.place_radoux} prix</div></div></div>}
-            {dernierConcours.place_basse&&<div style={{display:"flex",alignItems:"center",gap:12,background:"#EDE7F6",borderRadius:10,padding:"10px 14px"}}><div><div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase"}}>Basse</div><div style={{fontWeight:700,color:"#4527A0",fontSize:16}}>{dernierConcours.place_basse} prix</div></div></div>}
+        <div style={{...S.card,marginBottom:16,overflow:"hidden"}}>
+          {/* En-tête */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Dernier concours</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:16,lineHeight:1.2}}>{dernierConcours.titre||"Concours"}</div>
+            <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
           </div>
+
+          {/* Résultat principal centré */}
+          {dernierConcours.place_globale&&(
+            <div style={{background:C.rougeClair,borderRadius:14,padding:"18px 12px",textAlign:"center",marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.secondary,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Classement général</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.secondary,fontSize:32,lineHeight:1}}>{dernierConcours.place_globale}</div>
+              <div style={{fontSize:12,color:C.secondary,marginTop:4,opacity:0.8}}>prix</div>
+            </div>
+          )}
+
+          {/* Radoux + Basse côte à côte */}
+          {(dernierConcours.place_radoux||dernierConcours.place_basse)&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {dernierConcours.place_radoux&&(
+                <div style={{background:C.bleuClair,borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:C.primary,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Radoux</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:24,lineHeight:1}}>{dernierConcours.place_radoux}</div>
+                  <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>prix</div>
+                </div>
+              )}
+              {dernierConcours.place_basse&&(
+                <div style={{background:"#EDE7F6",borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#4527A0",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Basse</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4527A0",fontSize:24,lineHeight:1}}>{dernierConcours.place_basse}</div>
+                  <div style={{fontSize:11,color:"#7B5EA7",marginTop:3}}>prix</div>
+                </div>
+              )}
+            </div>
+          )}
+
           {dernierConcours.note_admin&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #E8E0D0",fontSize:13,color:C.primary,lineHeight:1.7,fontStyle:"italic"}}>{dernierConcours.note_admin}</div>}
         </div>
       )}
@@ -296,7 +324,9 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
           <div style={S.secTitle}>Prochains événements</div>
           {next3.map(ev=>(
             <div key={ev.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:40,height:40,borderRadius:10,background:evColors[ev.type]||C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:700,color:C.primary}}>{evLabels[ev.type]?.slice(0,3)}</div>
+              <div style={{width:40,height:40,borderRadius:10,background:evColors[ev.type]||C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:20}}>
+                {ev.type==="concert"?"🎵":ev.type==="concours"?"🏆":ev.type==="stage"?"🎓":"📅"}
+              </div>
               <div style={{flex:1}}>
                 <div style={{fontWeight:600,color:C.primary,fontSize:13}}>{ev.titre||evLabels[ev.type]}</div>
                 <div style={{fontSize:11,color:C.grisChaud,marginTop:2,textTransform:"capitalize"}}>{fd(ev.date)} · {ev.heure}</div>
