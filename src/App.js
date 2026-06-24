@@ -1062,7 +1062,7 @@ function MembresTab({isAdmin,showToast,currentUser,setCurrentUser}) {
       />
 
       {/* Mon profil */}
-      {currentUser&&(
+      {currentUser?.isMembre&&(
         <div onClick={()=>setModal("profil")} style={{...S.card,display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginBottom:16,borderColor:C.primary}}>
           <Avatar nom={currentUser.nom} prenom={currentUser.prenom} size={40}/>
           <div style={{flex:1}}>
@@ -1154,14 +1154,14 @@ function MonCompte({onClose,currentUser,setCurrentUser,showToast}) {
 
       {/* Onglets */}
       <div style={{display:"flex",gap:8,marginBottom:20}}>
-        {[["profil","Mon profil"],["mdp","Mot de passe"]].map(([id,l])=>(
+        {(currentUser?.isMembre?[["profil","Mon profil"],["mdp","Mot de passe"]]:[["mdp","Mot de passe"]]).map(([id,l])=>(
           <button key={id} onClick={()=>setPage(id)} style={{flex:1,padding:"8px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:page===id?700:400,background:page===id?C.primary:"#E8E0D0",color:page===id?"#fff":C.grisChaud,fontSize:12}}>
             {l}
           </button>
         ))}
       </div>
 
-      {page==="profil"&&(
+      {page==="profil"&&currentUser?.isMembre&&(
         <>
           <label style={S.label}>Prénom</label>
           <input style={S.input} value={f.prenom} onChange={e=>s("prenom",e.target.value)}/>
@@ -1423,14 +1423,9 @@ function AuthScreen({onClose}) {
     if(!prenom||!nom||!email||!password){setError("Tous les champs sont requis");return;}
     if(password.length<6){setError("Minimum 6 caractères");return;}
     setLoading(true);setError("");
-    const{data,error:err}=await supabase.auth.signUp({email,password});
+    const{data,error:err}=await supabase.auth.signUp({email,password,options:{data:{prenom,nom}}});
     if(err){setError(err.message);setLoading(false);return;}
-    if(data.user){
-      const{data:existing}=await supabase.from("membres").select("id").eq("email",email).maybeSingle();
-      if(!existing){
-        await supabase.from("membres").insert([{id:data.user.id,prenom,nom,email,is_admin:false,role:""}]);
-      }
-    }
+    setError("");
     onClose?.();
   };
 
@@ -1501,19 +1496,27 @@ export default function App() {
   useEffect(()=>{
     supabase.auth.getSession().then(({data})=>{
       setSession(data.session);
-      if(data.session) loadUser(data.session.user.email);
+      if(data.session) loadUser(data.session.user);
     });
     const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{
       setSession(s);
-      if(s) loadUser(s.user.email);
+      if(s) loadUser(s.user);
       else{setIsAdmin(false);setCurrentUser(null);}
     });
     return()=>subscription.unsubscribe();
   },[]);
 
-  const loadUser = async(email) => {
-    const{data}=await supabase.from("membres").select("*").eq("email",email).single();
-    if(data){setIsAdmin(data.is_admin||false);setCurrentUser(data);}
+  const loadUser = async(authUser) => {
+    const{data}=await supabase.from("membres").select("*").eq("id",authUser.id).maybeSingle();
+    if(data){
+      setIsAdmin(data.is_admin||false);
+      setCurrentUser({...data,isMembre:true});
+    } else {
+      // Compte connecté mais pas dans le groupe
+      const meta = authUser.user_metadata||{};
+      setIsAdmin(false);
+      setCurrentUser({id:authUser.id,email:authUser.email,prenom:meta.prenom||"",nom:meta.nom||"",role:"",is_admin:false,isMembre:false});
+    }
   };
 
   useEffect(()=>{
