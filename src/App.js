@@ -1109,7 +1109,6 @@ function MonCompte({onClose,currentUser,setCurrentUser,showToast}) {
           {initials}
         </div>
         <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:16}}>{currentUser?.prenom} {currentUser?.nom}</div>
-        <div style={{fontSize:12,color:C.grisChaud}}>{currentUser?.role}</div>
         {currentUser?.is_admin&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginTop:4}}>Admin</span>}
       </div>
 
