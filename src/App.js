@@ -367,22 +367,53 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
   const PresenceBtns = ({ev}) => {
     const p = getPresence(ev.id);
     const counts = countPresences(ev.id);
+    const [open,setOpen] = useState(false);
+    const evPresences = presences.filter(x=>x.evenement_id===ev.id);
+    const oui = evPresences.filter(x=>x.statut==="oui");
+    const peutetre = evPresences.filter(x=>x.statut==="peut-etre");
+    const non = evPresences.filter(x=>x.statut==="non");
+
     const btn = (statut,label,color,bg) => (
-      <button onClick={()=>setPresence(ev.id,statut)} style={{padding:"5px 10px",borderRadius:8,border:`1px solid ${p?.statut===statut?color:"#D4C9B0"}`,background:p?.statut===statut?bg:"transparent",color:p?.statut===statut?color:C.grisChaud,fontSize:11,fontWeight:p?.statut===statut?700:400,cursor:"pointer"}}>
+      <button onClick={()=>setPresence(ev.id,statut)} style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1px solid ${p?.statut===statut?color:"#D4C9B0"}`,background:p?.statut===statut?bg:"transparent",color:p?.statut===statut?color:C.grisChaud,fontSize:11,fontWeight:p?.statut===statut?700:400,cursor:"pointer"}}>
         {label}
       </button>
     );
+
+    const MiniListe = ({items,label,color,bg}) => items.length===0?null:(
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:10,fontWeight:700,color,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label} ({items.length})</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          {items.map((x,i)=>(
+            <span key={i} style={{background:bg,color,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:500}}>{x.membre_nom}</span>
+          ))}
+        </div>
+      </div>
+    );
+
     return (
       <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #E8E0D0"}}>
         <div style={{fontSize:10,color:C.grisChaud,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Ma présence</div>
-        <div style={{display:"flex",gap:6,marginBottom:6}}>
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
           {btn("oui","Présent",C.vert,C.vertClair)}
           {btn("non","Absent",C.secondary,C.rougeClair)}
           {btn("peut-etre","Peut-être",C.bleuMoyen,C.bleuClair)}
         </div>
-        <div style={{fontSize:10,color:C.grisChaud}}>
-          {counts.oui} présent(s) · {counts.peutetre} peut-être · {counts.non} absent(s)
-        </div>
+
+        {/* Compteur cliquable */}
+        <button onClick={()=>setOpen(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:10,color:C.grisChaud}}>{counts.oui} présent(s) · {counts.peutetre} peut-être · {counts.non} absent(s)</span>
+          <span style={{fontSize:10,color:C.grisChaud,transform:open?"rotate(180deg)":"none",transition:"0.2s"}}>▾</span>
+        </button>
+
+        {/* Liste dépliable */}
+        {open&&(
+          <div style={{marginTop:10,padding:"10px 12px",background:"#F5F0E8",borderRadius:10}}>
+            <MiniListe items={non} label="Absents" color={C.secondary} bg={C.rougeClair}/>
+            <MiniListe items={peutetre} label="Peut-être" color={C.bleuMoyen} bg={C.bleuClair}/>
+            <MiniListe items={oui} label="Présents" color={C.vert} bg={C.vertClair}/>
+            {evPresences.length===0&&<div style={{fontSize:12,color:C.grisChaud}}>Aucune réponse pour l'instant.</div>}
+          </div>
+        )}
       </div>
     );
   };
@@ -437,8 +468,9 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
               <div style={{flex:1}}>
                 <span style={{...S.badge,background:SUB[ev.type]?.light||C.bleuClair,color:SUB[ev.type]?.text||C.primary,marginBottom:6}}>{LABELS[ev.type]}</span>
-                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:14,textTransform:"capitalize"}}>{ev.titre||fd(ev.date)}</div>
-                <div style={{fontSize:12,color:C.grisChaud,marginTop:3}}>🕐 {ev.heure} · {ev.lieu}</div>
+                {ev.titre&&<div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:14}}>{ev.titre}</div>}
+                <div style={{fontWeight:ev.titre?400:700,color:C.primary,fontSize:ev.titre?12:14,textTransform:"capitalize",marginTop:ev.titre?2:4}}>{fd(ev.date)}</div>
+                <div style={{fontSize:12,color:C.grisChaud,marginTop:3}}>🕐 {ev.heure} · 📍 {ev.lieu}</div>
                 {ev.note&&<div style={{fontSize:12,color:C.secondary,fontWeight:600,marginTop:5}}>{ev.note}</div>}
               </div>
               {isAdmin&&<AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
@@ -500,9 +532,16 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
     const save=async()=>{
       if(!f.nom) return;
-      if(f.id){await supabase.from("dossiers").update({nom:f.nom,categorie:f.categorie}).eq("id",f.id);}
-      else{await supabase.from("dossiers").insert([{nom:f.nom,categorie:f.categorie,emoji:"📁",color:C.primary,ordre:dossiers.length+1}]);}
-      showToast(f.id?"Modifié ✓":"Dossier créé ✓");setModal(null);load();
+      if(f.id){
+        const{error}=await supabase.from("dossiers").update({nom:f.nom,categorie:f.categorie}).eq("id",f.id);
+        if(error){alert("Erreur: "+error.message);return;}
+      } else {
+        const{error}=await supabase.from("dossiers").insert([{nom:f.nom,categorie:f.categorie,emoji:"📁",color:C.primary,ordre:dossiers.length+1}]);
+        if(error){alert("Erreur: "+error.message);return;}
+      }
+      showToast(f.id?"Modifié ✓":"Dossier créé ✓");
+      setModal(null);
+      await load();
     };
     return (
       <Modal title={f.id?"Modifier dossier":"Nouveau dossier"} onClose={()=>setModal(null)}>
@@ -524,9 +563,16 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
     const s=(k,v)=>setF(x=>({...x,[k]:v}));
     const save=async()=>{
       if(!f.nom) return;
-      if(f.id){await supabase.from("sous_dossiers").update({nom:f.nom,date:f.date}).eq("id",f.id);}
-      else{await supabase.from("sous_dossiers").insert([{dossier_id:dossierId,nom:f.nom,date:f.date||null}]);}
-      showToast(f.id?"Modifié ✓":"Sous-dossier créé ✓");setModal(null);load();
+      if(f.id){
+        const{error}=await supabase.from("sous_dossiers").update({nom:f.nom,date:f.date}).eq("id",f.id);
+        if(error){alert("Erreur: "+error.message);return;}
+      } else {
+        const{error}=await supabase.from("sous_dossiers").insert([{dossier_id:dossierId,nom:f.nom,date:f.date||null}]);
+        if(error){alert("Erreur: "+error.message);return;}
+      }
+      showToast(f.id?"Modifié ✓":"Sous-dossier créé ✓");
+      setModal(null);
+      await load();
     };
     return (
       <Modal title={f.id?"Modifier":"Nouveau sous-dossier"} onClose={()=>setModal(null)}>
@@ -555,7 +601,9 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
         const{error}=await supabase.from("fichiers").insert([payload]);
         if(error){alert("Erreur: "+error.message);return;}
       }
-      showToast("Fichier ajouté ✓");setModal(null);load();
+      showToast("Fichier ajouté ✓");
+      setModal(null);
+      await load();
     };
 
     return (
@@ -589,14 +637,14 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
         playing={playing===f.id} onPlay={()=>setPlaying(playing===f.id?null:f.id)}
         onFavori={()=>toggleFav(f)}
         onEdit={()=>setModal({t:"fichier",data:{...f}})}
-        onDelete={()=>setConfirm({msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})}
+        onDelete={()=>setConfirm({msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);await load();}})}
         isAdmin={isAdmin} bColor={ap.bulleColor} bIcon={ap.bulleIcon}
       />
     );
     if(f.type==="pdf") return (
       <PdfCard key={f.id} nom={f.nom} taille={f.taille} url={f.url}
         onEdit={()=>setModal({t:"fichier",data:{...f}})}
-        onDelete={()=>setConfirm({msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})}
+        onDelete={()=>setConfirm({msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);await load();}})}
         isAdmin={isAdmin}
       />
     );
@@ -604,7 +652,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
       <FileCard key={f.id} nom={f.nom} taille={f.taille} url={f.url}
         typeLabel={f.type==="midi"?"MIDI":"Fichier"}
         onEdit={()=>setModal({t:"fichier",data:{...f}})}
-        onDelete={()=>setConfirm({msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);load();}})}
+        onDelete={()=>setConfirm({msg:`Supprimer "${f.nom}" ?`,fn:async()=>{await supabase.from("fichiers").delete().eq("id",f.id);showToast("Supprimé ✓");setConfirm(null);await load();}})}
         isAdmin={isAdmin}
       />
     );
@@ -647,7 +695,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
                 </div>
                 {isAdmin&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4}}>
                   <button onClick={()=>setModal({t:"sd",data:sd})} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>✏️</button>
-                  <button onClick={()=>setConfirm({msg:`Supprimer "${sd.nom}" ?`,fn:async()=>{await supabase.from("sous_dossiers").delete().eq("id",sd.id);showToast("Supprimé ✓");setConfirm(null);load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>🗑</button>
+                  <button onClick={()=>setConfirm({msg:`Supprimer "${sd.nom}" ?`,fn:async()=>{await supabase.from("sous_dossiers").delete().eq("id",sd.id);showToast("Supprimé ✓");setConfirm(null);await load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:13}}>🗑</button>
                 </div>}
               </div>
             ))}
@@ -688,7 +736,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
             </div>
             {isAdmin&&<div style={{marginTop:10,display:"flex",justifyContent:"center",gap:6}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setModal({t:"dossier",data:d})} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:6,fontSize:12}}>✏️</button>
-              <button onClick={()=>setConfirm({msg:`Supprimer "${d.nom}" ?`,fn:async()=>{await supabase.from("dossiers").delete().eq("id",d.id);showToast("Supprimé ✓");setConfirm(null);load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:6,fontSize:12}}>🗑</button>
+              <button onClick={()=>setConfirm({msg:`Supprimer "${d.nom}" ?`,fn:async()=>{await supabase.from("dossiers").delete().eq("id",d.id);showToast("Supprimé ✓");setConfirm(null);await load();}})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"3px 7px",borderRadius:6,fontSize:12}}>🗑</button>
             </div>}
           </div>
         ))}
@@ -925,8 +973,9 @@ function MembresTab({isAdmin,showToast,currentUser,setCurrentUser}) {
         setMembres(m=>m.map(x=>x.id===f.id?{...x,...payload}:x));
         if(currentUser?.id===f.id) setCurrentUser(u=>({...u,...payload}));
       } else {
-        const{data}=await supabase.from("membres").insert([payload]).select().single();
-        if(data) setMembres(m=>[...m,data]);
+        const{data,error}=await supabase.from("membres").insert([payload]).select("*").single();
+        if(error){alert("Erreur: "+error.message);return;}
+        if(data) setMembres(m=>[...m,data].sort((a,b)=>a.nom.localeCompare(b.nom)));
       }
       showToast(f.id?"Modifié ✓":"Ajouté ✓");setModal(null);
     };
@@ -1015,6 +1064,111 @@ function MembresTab({isAdmin,showToast,currentUser,setCurrentUser}) {
       {modal?.t==="new"&&<Form init={null}/>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
+  );
+}
+
+// ── MON COMPTE ─────────────────────────────────────────────────────
+function MonCompte({onClose,currentUser,setCurrentUser,showToast}) {
+  const [page,setPage] = useState("profil");
+  const [f,setF] = useState({
+    prenom:currentUser?.prenom||"",
+    nom:currentUser?.nom||"",
+    email:currentUser?.email||"",
+    role:currentUser?.role||"",
+    adresse:currentUser?.adresse||"",
+  });
+  const [mdp,setMdp] = useState({actuel:"",nouveau:"",confirm:""});
+  const [loading,setLoading] = useState(false);
+  const [errMdp,setErrMdp] = useState("");
+
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const sm=(k,v)=>setMdp(x=>({...x,[k]:v}));
+
+  const saveProfil = async() => {
+    if(!f.prenom||!f.nom) return;
+    setLoading(true);
+    const payload={prenom:f.prenom,nom:f.nom,role:f.role||"",adresse:f.adresse||""};
+    const{error}=await supabase.from("membres").update(payload).eq("id",currentUser.id);
+    if(error){alert("Erreur: "+error.message);setLoading(false);return;}
+    setCurrentUser(u=>({...u,...payload}));
+    showToast("Profil mis à jour ✓");
+    setLoading(false);
+  };
+
+  const saveMdp = async() => {
+    setErrMdp("");
+    if(!mdp.nouveau) {setErrMdp("Saisis un nouveau mot de passe");return;}
+    if(mdp.nouveau.length<6) {setErrMdp("Minimum 6 caractères");return;}
+    if(mdp.nouveau!==mdp.confirm) {setErrMdp("Les mots de passe ne correspondent pas");return;}
+    setLoading(true);
+    const{error}=await supabase.auth.updateUser({password:mdp.nouveau});
+    if(error){setErrMdp("Erreur : "+error.message);setLoading(false);return;}
+    showToast("Mot de passe modifié ✓");
+    setMdp({actuel:"",nouveau:"",confirm:""});
+    setLoading(false);
+  };
+
+  const initials = `${currentUser?.prenom?.[0]||""}${currentUser?.nom?.[0]||""}`;
+
+  return (
+    <Modal title="Mon compte" onClose={onClose}>
+      {/* Avatar + nom */}
+      <div style={{textAlign:"center",marginBottom:20}}>
+        <div style={{width:64,height:64,borderRadius:"50%",background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:24,margin:"0 auto 10px"}}>
+          {initials}
+        </div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:16}}>{currentUser?.prenom} {currentUser?.nom}</div>
+        <div style={{fontSize:12,color:C.grisChaud}}>{currentUser?.role}</div>
+        {currentUser?.is_admin&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginTop:4}}>Admin</span>}
+      </div>
+
+      {/* Onglets */}
+      <div style={{display:"flex",gap:8,marginBottom:20}}>
+        {[["profil","Mon profil"],["mdp","Mot de passe"]].map(([id,l])=>(
+          <button key={id} onClick={()=>setPage(id)} style={{flex:1,padding:"8px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:page===id?700:400,background:page===id?C.primary:"#E8E0D0",color:page===id?"#fff":C.grisChaud,fontSize:12}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {page==="profil"&&(
+        <>
+          <label style={S.label}>Prénom</label>
+          <input style={S.input} value={f.prenom} onChange={e=>s("prenom",e.target.value)}/>
+          <label style={S.label}>Nom</label>
+          <input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
+          <label style={S.label}>Email</label>
+          <input style={{...S.input,opacity:0.5}} value={f.email} disabled/>
+          <label style={S.label}>Rôle / Instrument</label>
+          <input style={S.input} value={f.role} onChange={e=>s("role",e.target.value)} placeholder="1ère trompe…"/>
+          <label style={S.label}>Adresse</label>
+          <input style={S.input} value={f.adresse} onChange={e=>s("adresse",e.target.value)}/>
+          <button style={{...S.btnP,opacity:loading?0.6:1}} onClick={saveProfil} disabled={loading}>
+            {loading?"Enregistrement…":"Enregistrer"}
+          </button>
+        </>
+      )}
+
+      {page==="mdp"&&(
+        <>
+          <div style={{background:C.bleuClair,borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:C.primary}}>
+            Pour changer ton mot de passe, saisis le nouveau deux fois et confirme.
+          </div>
+          <label style={S.label}>Nouveau mot de passe</label>
+          <input type="password" style={S.input} value={mdp.nouveau} onChange={e=>sm("nouveau",e.target.value)} placeholder="Minimum 6 caractères"/>
+          <label style={S.label}>Confirmer le mot de passe</label>
+          <input type="password" style={S.input} value={mdp.confirm} onChange={e=>sm("confirm",e.target.value)} placeholder="Répète le mot de passe"/>
+          {errMdp&&<div style={{background:C.rougeClair,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.secondary,marginBottom:10}}>{errMdp}</div>}
+          <button style={{...S.btnP,opacity:loading?0.6:1}} onClick={saveMdp} disabled={loading}>
+            {loading?"Enregistrement…":"Changer le mot de passe"}
+          </button>
+        </>
+      )}
+
+      <button onClick={async()=>{await supabase.auth.signOut();onClose();}} style={{...S.btnD,marginTop:12}}>
+        Déconnexion
+      </button>
+    </Modal>
   );
 }
 
@@ -1206,6 +1360,7 @@ export default function App() {
   const [toast,setToast] = useState(null);
   const [loginModal,setLoginModal] = useState(false);
   const [adminModal,setAdminModal] = useState(false);
+  const [compteModal,setCompteModal] = useState(false);
   const [favoris,setFavoris] = useState([]);
   const [allEvents,setAllEvents] = useState([]);
   const [apparence,setApparenceState] = useState({
@@ -1270,12 +1425,12 @@ export default function App() {
           </div>
           <div>
             {session ? (
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
                 {isAdmin&&(
                   <button onClick={()=>setAdminModal(true)} style={{background:C.secondary+"33",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:20,color:aColor,fontSize:10,fontWeight:700}}>Admin</button>
                 )}
-                <button onClick={()=>supabase.auth.signOut()} style={{background:"#ffffff22",border:"none",cursor:"pointer",padding:"6px 12px",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600}}>
-                  Déconnexion
+                <button onClick={()=>setCompteModal(true)} style={{width:32,height:32,borderRadius:"50%",background:"#ffffff22",border:"2px solid #ffffff44",cursor:"pointer",color:"#fff",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {currentUser ? `${currentUser.prenom?.[0]||""}${currentUser.nom?.[0]||""}` : "?"}
                 </button>
               </div>
             ) : (
@@ -1309,6 +1464,16 @@ export default function App() {
         {tab==="messages" &&<MessagesTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser}/>}
         {tab==="membres"  &&<MembresTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
       </div>
+
+      {/* Modal mon compte */}
+      {compteModal&&currentUser&&(
+        <MonCompte
+          onClose={()=>setCompteModal(false)}
+          currentUser={currentUser}
+          setCurrentUser={setCurrentUser}
+          showToast={showToast}
+        />
+      )}
 
       {/* Modal connexion */}
       {loginModal&&(
