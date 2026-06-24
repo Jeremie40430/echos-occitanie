@@ -38,11 +38,11 @@ const creerNotif = async(titre,type="info") => {
 };
 
 const S = {
-  card:  { background:C.blanc, border:"1px solid #D4C9B0", borderRadius:12, padding:"12px 14px", marginBottom:10, boxShadow:"0 1px 4px rgba(26,31,110,0.06)" },
+  card:  { background:"var(--card)", border:"1px solid #D4C9B0", borderRadius:"var(--radius)", padding:"12px 14px", marginBottom:10, boxShadow:"0 1px 4px rgba(26,31,110,0.06)" },
   badge: { display:"inline-block", padding:"2px 9px", borderRadius:20, fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.05em" },
   secTitle: { fontFamily:"'Playfair Display', serif", fontSize:15, color:C.primary, marginBottom:12, fontWeight:700 },
-  input:  { width:"100%", padding:"10px 12px", borderRadius:9, border:"1px solid #D4C9B0", fontSize:13, fontFamily:"Inter,sans-serif", background:C.blanc, boxSizing:"border-box", outline:"none", marginBottom:10, color:C.primary },
-  select: { width:"100%", padding:"10px 12px", borderRadius:9, border:"1px solid #D4C9B0", fontSize:13, fontFamily:"Inter,sans-serif", background:C.blanc, boxSizing:"border-box", outline:"none", marginBottom:10, color:C.primary },
+  input:  { width:"100%", padding:"10px 12px", borderRadius:9, border:"1px solid #D4C9B0", fontSize:13, fontFamily:"Inter,sans-serif", background:"var(--card)", boxSizing:"border-box", outline:"none", marginBottom:10, color:C.primary },
+  select: { width:"100%", padding:"10px 12px", borderRadius:9, border:"1px solid #D4C9B0", fontSize:13, fontFamily:"Inter,sans-serif", background:"var(--card)", boxSizing:"border-box", outline:"none", marginBottom:10, color:C.primary },
   label:  { fontSize:11, fontWeight:600, color:C.grisChaud, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4, display:"block" },
   btnP:   { width:"100%", padding:"11px", borderRadius:10, border:"none", cursor:"pointer", background:C.primary, color:"#fff", fontWeight:700, fontSize:13, fontFamily:"Inter,sans-serif" },
   btnS:   { width:"100%", padding:"11px", borderRadius:10, border:"1px solid #D4C9B0", cursor:"pointer", background:"transparent", color:C.grisChaud, fontWeight:600, fontSize:13, fontFamily:"Inter,sans-serif", marginTop:8 },
@@ -435,7 +435,15 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
     showToast(f.id?"Modifié ✓":"Ajouté ✓");setModal(null);
   };
 
-  const SUBTABS=[{id:"avenir",l:"A venir"},{id:"repetitions",l:"Répétitions"},{id:"concerts",l:"Concerts"},{id:"concours",l:"Concours"},{id:"stages",l:"Stages"},{id:"palmares",l:"Palmares"}];
+  const all=[...upcoming,...past];
+  const SUBTABS=[
+    {id:"avenir",l:"À venir"},
+    {id:"repetitions",l:"Répétitions", hide:!all.some(e=>e.type==="repetition")},
+    {id:"concerts",   l:"Concerts",    hide:!all.some(e=>e.type==="concert")},
+    {id:"concours",   l:"Concours",    hide:!all.some(e=>e.type==="concours")},
+    {id:"stages",     l:"Stages",      hide:!all.some(e=>e.type==="stage")},
+    {id:"palmares",   l:"Palmarès",    hide:!past.some(e=>e.type==="concours")},
+  ].filter(t=>!t.hide);
   const LABELS={concert:"Concert",repetition:"Répétition",concours:"Concours",stage:"Stage"};
   const getList=()=>{
     if(subTab==="avenir") return upcoming;
@@ -1168,6 +1176,9 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
       bulle_color:local.bulleColor, bulle_icon:local.bulleIcon,
       header_color:local.headerColor, accent_color:local.accentColor,
       nom_groupe:local.nomGroupe||"", sous_titre:local.sousTitre||"", logo_url:local.logoUrl||"",
+      fond_color:local.fondColor||"#F5F0E8",
+      card_color:local.cardColor||"#FDFAF5",
+      card_radius:local.cardRadius||12,
     },{onConflict:"id"});
     if(error) { alert("Erreur sauvegarde: "+error.message); return; }
     showToast("Enregistré ✓"); setPage(null);
@@ -1192,6 +1203,7 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
   const MENU=[
     {id:"identite",  e:"🏷️", l:"Identité du groupe", d:"Nom, sous-titre, logo"},
     {id:"couleurs",  e:"🎨", l:"Couleurs",            d:"Header, accent, boutons"},
+    {id:"style",     e:"✨", l:"Style",               d:"Fond, cards, arrondi"},
     {id:"audio",     e:"🔴", l:"Lecteur audio",       d:"Couleur et icône du bouton play"},
     {id:"inscrits",  e:"👥", l:"Inscrits",            d:"Liste des comptes créés"},
   ];
@@ -1291,6 +1303,53 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
       <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
     </Modal>
   );
+
+  if(page==="style") {
+    const FONDS=[
+      {v:"#F5F0E8",l:"Parchemin"},{v:"#FFFFFF",l:"Blanc"},
+      {v:"#F0F4F8",l:"Gris clair"},{v:"#1A1F2E",l:"Nuit"},
+      {v:"#0D1B2A",l:"Marine foncé"},{v:"#1B2A1A",l:"Forêt"},
+    ];
+    const CARDS=[
+      {v:"#FDFAF5",l:"Ivoire"},{v:"#FFFFFF",l:"Blanc"},
+      {v:"#F8F9FA",l:"Gris léger"},{v:"#232B3A",l:"Ardoise"},
+      {v:"#1E2D3D",l:"Bleu nuit"},{v:"#1F2A1F",l:"Vert nuit"},
+    ];
+    const RADIUS=[{v:4,l:"Carré"},{v:8,l:"Léger"},{v:12,l:"Standard"},{v:18,l:"Arrondi"},{v:24,l:"Très arrondi"}];
+    return (
+      <Modal title="Style" onClose={()=>setPage(null)}>
+        <label style={S.label}>Couleur de fond</label>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:18}}>
+          {FONDS.map(o=>(
+            <div key={o.v} onClick={()=>s("fondColor",o.v)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer"}}>
+              <div style={{width:38,height:38,borderRadius:"50%",background:o.v,border:local.fondColor===o.v?"3px solid #333":"2px solid #D4C9B0"}}/>
+              <span style={{fontSize:9,color:C.grisChaud}}>{o.l}</span>
+            </div>
+          ))}
+        </div>
+        <label style={S.label}>Couleur des cards</label>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:18}}>
+          {CARDS.map(o=>(
+            <div key={o.v} onClick={()=>s("cardColor",o.v)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer"}}>
+              <div style={{width:38,height:38,borderRadius:"50%",background:o.v,border:local.cardColor===o.v?"3px solid #333":"2px solid #D4C9B0"}}/>
+              <span style={{fontSize:9,color:C.grisChaud}}>{o.l}</span>
+            </div>
+          ))}
+        </div>
+        <label style={S.label}>Arrondi des cards</label>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
+          {RADIUS.map(o=>(
+            <div key={o.v} onClick={()=>s("cardRadius",o.v)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer"}}>
+              <div style={{width:48,height:32,background:local.cardRadius===o.v?C.primary:"#E8E0D0",borderRadius:o.v,border:local.cardRadius===o.v?"2px solid #333":"1px solid #D4C9B0"}}/>
+              <span style={{fontSize:9,color:C.grisChaud}}>{o.l}</span>
+            </div>
+          ))}
+        </div>
+        <button style={S.btnP} onClick={save}>Enregistrer</button>
+        <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
+      </Modal>
+    );
+  }
 
   if(page==="inscrits") return (
     <Modal title="Inscrits" onClose={()=>setPage(null)}>
@@ -1459,6 +1518,7 @@ export default function App() {
   const [apparence,setApparenceState] = useState({
     bulleColor:"#C8102E", bulleIcon:"▶", headerColor:"#1A1F6E", accentColor:"#C8102E",
     nomGroupe:"Les Echos d'Occitanie", sousTitre:"Trompe de Chasse", logoUrl:"",
+    fondColor:"#F5F0E8", cardColor:"#FDFAF5", cardRadius:12,
   });
 
   useEffect(()=>{
@@ -1513,6 +1573,9 @@ export default function App() {
         nomGroupe:data.nom_groupe||"Les Echos d'Occitanie",
         sousTitre:data.sous_titre||"Trompe de Chasse",
         logoUrl:data.logo_url||"",
+        fondColor:data.fond_color||"#F5F0E8",
+        cardColor:data.card_color||"#FDFAF5",
+        cardRadius:data.card_radius||12,
       });
     });
   },[]);
@@ -1523,10 +1586,13 @@ export default function App() {
 
   const hColor = apparence.headerColor||C.primary;
   const aColor = apparence.accentColor||C.secondary;
+  const fondColor = apparence.fondColor||C.parchemin;
+  const cardColor = apparence.cardColor||C.blanc;
+  const cardRadius = apparence.cardRadius||12;
 
   return (
-    <div style={{minHeight:"100vh",background:C.parchemin,fontFamily:"Inter,sans-serif",maxWidth:480,margin:"0 auto"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none}`}</style>
+    <div style={{minHeight:"100vh",background:fondColor,fontFamily:"Inter,sans-serif",maxWidth:480,margin:"0 auto"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none} :root{--bg:${fondColor};--card:${cardColor};--radius:${cardRadius}px}`}</style>
 
       {/* Header */}
       <div style={{background:hColor,padding:"14px 16px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
@@ -1545,7 +1611,7 @@ export default function App() {
             {session ? (
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 {isAdmin&&(
-                  <button onClick={()=>setAdminModal(true)} style={{background:C.secondary+"33",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:20,color:aColor,fontSize:10,fontWeight:700}}>Admin</button>
+                  <button onClick={()=>setAdminModal(true)} title="Paramètres admin" style={{background:"#ffffff22",border:"none",cursor:"pointer",width:32,height:32,borderRadius:"50%",color:"#fff",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center"}}>⚙️</button>
                 )}
                 <NotifBell currentUser={currentUser} setCurrentUser={setCurrentUser}/>
                 <button onClick={()=>setCompteModal(true)} style={{width:32,height:32,borderRadius:"50%",background:"#ffffff22",border:"2px solid #ffffff44",cursor:"pointer",color:"#fff",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1567,7 +1633,7 @@ export default function App() {
             return (
               <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 2px 10px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?aColor:"#6B8AAA",position:"relative",transition:"color 0.18s"}}>
                 {t.ic}
-                <span style={{fontSize:7,fontWeight:active?700:400,letterSpacing:"0.03em",textTransform:"uppercase"}}>{t.l}</span>
+                <span style={{fontSize:10,fontWeight:active?700:400,letterSpacing:"0.03em",textTransform:"uppercase"}}>{t.l}</span>
                 {active&&<div style={{position:"absolute",bottom:0,left:"10%",right:"10%",height:2,background:aColor,borderRadius:"2px 2px 0 0"}}/>}
               </button>
             );
