@@ -643,7 +643,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
       supabase.from("sous_dossiers").select("*").order("created_at",{ascending:false}),
       supabase.from("fichiers").select("*"),
     ]);
-    const isMembre = currentUser?.isMembre||currentUser?.is_admin;
+    const isMembre = currentUser?.isMembre||currentUser?.is_admin||currentUser?.membre_groupe;
     setDossiers((d||[]).filter(x=>!x.prive||isMembre));
     setSousDossiers(sd||[]);
     const mapped=(f||[]).map(x=>({...x,dossier_id:x.morceau_id}));
@@ -1010,6 +1010,13 @@ function MembresTab({showToast}) {
     showToast(nv?"Compte bloqué 🚫":"Compte débloqué ✓");
   };
 
+  const toggleMembreGroupe = async(p) => {
+    const nv = !p.membre_groupe;
+    await supabase.from("profiles").update({membre_groupe:nv}).eq("id",p.id);
+    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,membre_groupe:nv}:x));
+    showToast(nv?"Accès groupe accordé ✓":"Accès groupe retiré");
+  };
+
   if(loading) return <Spinner/>;
 
   return (
@@ -1022,10 +1029,12 @@ function MembresTab({showToast}) {
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,color:C.primary,fontSize:13}}>
               {p.prenom} {p.nom}
-              {p.bloque&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginLeft:6,fontSize:9}}>Bloqué</span>}
+              {p.membre_groupe&&<span style={{...S.badge,background:C.bleuClair,color:C.primary,marginLeft:6,fontSize:9}}>Groupe</span>}
+              {p.bloque&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginLeft:4,fontSize:9}}>Bloqué</span>}
             </div>
             <div style={{fontSize:11,color:C.grisChaud,marginTop:1}}>{p.email}</div>
           </div>
+          <button onClick={()=>toggleMembreGroupe(p)} title={p.membre_groupe?"Retirer du groupe":"Accès groupe"} style={{background:p.membre_groupe?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:13,color:p.membre_groupe?"#fff":C.grisChaud}}>🎺</button>
           <button onClick={()=>toggleNewsletter(p)} title="Newsletter" style={{background:p.newsletter?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:13,color:p.newsletter?"#fff":C.grisChaud}}>📧</button>
           <button onClick={()=>toggleBloque(p)} title={p.bloque?"Débloquer":"Bloquer"} style={{background:p.bloque?"#E8E0D0":C.rougeClair,border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:14}}>{p.bloque?"🔓":"🚫"}</button>
           <button onClick={()=>setConfirm({msg:`Supprimer ${p.prenom} ${p.nom} ?`,fn:async()=>{await supabase.from("profiles").delete().eq("id",p.id);setProfiles(prev=>prev.filter(x=>x.id!==p.id));showToast("Supprimé ✓");setConfirm(null);}})} style={{background:C.rougeClair,border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:14}}>🗑</button>
@@ -1477,14 +1486,17 @@ export default function App() {
       setCurrentUser({id:authUser.id,email:authUser.email,prenom:meta.prenom||"",nom:meta.nom||"",role:"",is_admin:false,isMembre:false});
     }
     // Créer le profil si absent, ou vérifier le blocage
-    const{data:prof}=await supabase.from("profiles").select("id,bloque").eq("id",authUser.id).maybeSingle();
+    const{data:prof}=await supabase.from("profiles").select("id,bloque,membre_groupe").eq("id",authUser.id).maybeSingle();
     if(!prof){
       const meta=authUser.user_metadata||{};
-      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||meta.prenom||"",nom:data?.nom||meta.nom||"",email:authUser.email||"",newsletter:false,bloque:false}]);
+      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||meta.prenom||"",nom:data?.nom||meta.nom||"",email:authUser.email||"",newsletter:false,bloque:false,membre_groupe:false}]);
     } else if(prof.bloque){
       await supabase.auth.signOut();
       alert("Votre compte a été bloqué. Contactez l'administrateur.");
       return;
+    } else if(prof.membre_groupe && !data){
+      // Compte simple mais marqué comme membre du groupe
+      setCurrentUser(u=>u?{...u,isMembre:true}:u);
     }
   };
 
