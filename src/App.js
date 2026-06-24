@@ -1603,7 +1603,7 @@ export default function App() {
             }
             <div>
               <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:15,fontWeight:700,lineHeight:1.2}}>{apparence.nomGroupe}</div>
-              <div style={{color:"#A8B8D8",fontSize:10,letterSpacing:"0.07em",textTransform:"uppercase"}}>{apparence.sousTitre}{isAdmin?" · Admin":currentUser?" · Membre":""}</div>
+              <div style={{color:"#A8B8D8",fontSize:10,letterSpacing:"0.07em",textTransform:"uppercase"}}>{apparence.sousTitre}</div>
             </div>
           </div>
           <div>
