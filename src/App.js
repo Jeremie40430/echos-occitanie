@@ -984,119 +984,47 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
 }
 
 // ── MEMBRES ────────────────────────────────────────────────────────
-function MembresTab({isAdmin,showToast,currentUser,setCurrentUser}) {
-  const [membres,setMembres] = useState([]);
+function MembresTab({showToast}) {
+  const [profiles,setProfiles] = useState([]);
   const [loading,setLoading] = useState(true);
-  const [modal,setModal] = useState(null);
-  const [confirm,setConfirm] = useState(null);
   const [search,setSearch] = useState("");
+  const [confirm,setConfirm] = useState(null);
 
   useEffect(()=>{
-    supabase.from("membres").select("*").order("nom").then(({data})=>{setMembres(data||[]);setLoading(false);});
+    supabase.from("profiles").select("*").order("nom").then(({data})=>{setProfiles(data||[]);setLoading(false);});
   },[]);
 
-  const filtered = membres.filter(m=>`${m.prenom} ${m.nom} ${m.role}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = profiles.filter(p=>`${p.prenom} ${p.nom} ${p.email}`.toLowerCase().includes(search.toLowerCase()));
 
-  const Form = ({init}) => {
-    const [f,setF] = useState(init||{prenom:"",nom:"",email:"",role:"",adresse:"",is_admin:false});
-    const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save = async() => {
-      if(!f.prenom||!f.nom) return;
-      const payload={prenom:f.prenom,nom:f.nom,email:f.email||"",role:f.role||"",adresse:f.adresse||"",is_admin:f.is_admin||false};
-      if(f.id){
-        await supabase.from("membres").update(payload).eq("id",f.id);
-        setMembres(m=>m.map(x=>x.id===f.id?{...x,...payload}:x));
-        if(currentUser?.id===f.id) setCurrentUser(u=>({...u,...payload}));
-      } else {
-        const{data,error}=await supabase.from("membres").insert([payload]).select("*").single();
-        if(error){alert("Erreur: "+error.message);return;}
-        if(data) setMembres(m=>[...m,data].sort((a,b)=>a.nom.localeCompare(b.nom)));
-      }
-      showToast(f.id?"Modifié ✓":"Ajouté ✓");setModal(null);
-    };
-    return (
-      <Modal title={f.id?"Modifier membre":"Nouveau membre"} onClose={()=>setModal(null)}>
-        <label style={S.label}>Prénom *</label><input style={S.input} value={f.prenom} onChange={e=>s("prenom",e.target.value)}/>
-        <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
-        <label style={S.label}>Email</label><input style={S.input} value={f.email||""} onChange={e=>s("email",e.target.value)}/>
-        <label style={S.label}>Rôle / Instrument</label><input style={S.input} value={f.role||""} onChange={e=>s("role",e.target.value)} placeholder="1ère trompe, cor…"/>
-        <label style={S.label}>Adresse</label><input style={S.input} value={f.adresse||""} onChange={e=>s("adresse",e.target.value)}/>
-        {isAdmin&&<label style={{...S.label,display:"flex",alignItems:"center",gap:8,textTransform:"none",fontSize:13,marginBottom:14,cursor:"pointer"}}><input type="checkbox" checked={f.is_admin||false} onChange={e=>s("is_admin",e.target.checked)} style={{width:16,height:16}}/>Administrateur</label>}
-        <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Ajouter"}</button>
-        <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-      </Modal>
-    );
-  };
-
-  const MonProfil = () => {
-    const [f,setF] = useState({...currentUser});
-    const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save = async() => {
-      const payload={prenom:f.prenom,nom:f.nom,role:f.role||"",adresse:f.adresse||""};
-      await supabase.from("membres").update(payload).eq("id",f.id);
-      setCurrentUser(u=>({...u,...payload}));
-      setMembres(m=>m.map(x=>x.id===f.id?{...x,...payload}:x));
-      showToast("Profil mis à jour ✓");setModal(null);
-    };
-    return (
-      <Modal title="Mon profil" onClose={()=>setModal(null)}>
-        <div style={{width:56,height:56,borderRadius:"50%",background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:20,margin:"0 auto 18px"}}>
-          {f.prenom?.[0]}{f.nom?.[0]}
-        </div>
-        <label style={S.label}>Prénom</label><input style={S.input} value={f.prenom||""} onChange={e=>s("prenom",e.target.value)}/>
-        <label style={S.label}>Nom</label><input style={S.input} value={f.nom||""} onChange={e=>s("nom",e.target.value)}/>
-        <label style={S.label}>Email</label><input style={{...S.input,opacity:0.6}} value={f.email||""} disabled/>
-        <label style={S.label}>Rôle / Instrument</label><input style={S.input} value={f.role||""} onChange={e=>s("role",e.target.value)}/>
-        <label style={S.label}>Adresse</label><input style={S.input} value={f.adresse||""} onChange={e=>s("adresse",e.target.value)}/>
-        <button style={S.btnP} onClick={save}>Enregistrer</button>
-        <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-      </Modal>
-    );
+  const toggleNewsletter = async(p) => {
+    const nv = !p.newsletter;
+    await supabase.from("profiles").update({newsletter:nv}).eq("id",p.id);
+    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,newsletter:nv}:x));
+    showToast(nv?"Abonné newsletter ✓":"Désabonné newsletter");
   };
 
   if(loading) return <Spinner/>;
 
   return (
     <>
-      {/* Barre recherche */}
-      <input
-        value={search}
-        onChange={e=>setSearch(e.target.value)}
-        placeholder="Rechercher un membre…"
-        style={{...S.input,marginBottom:16}}
-      />
-
-      {/* Mon profil */}
-      {currentUser?.isMembre&&(
-        <div onClick={()=>setModal("profil")} style={{...S.card,display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginBottom:16,borderColor:C.primary}}>
-          <Avatar nom={currentUser.nom} prenom={currentUser.prenom} size={40}/>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{currentUser.prenom} {currentUser.nom} <span style={{fontSize:10,color:C.secondary,fontWeight:400}}>(moi)</span></div>
-            <div style={{fontSize:11,color:C.grisChaud}}>{currentUser.role}</div>
-          </div>
-          <span style={{fontSize:12,color:C.grisChaud}}>Modifier</span>
-        </div>
-      )}
-
-      <div style={S.secTitle}>Membres ({filtered.length})</div>
-
-      {filtered.map(m=>(
-        <div key={m.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
-          <Avatar nom={m.nom} prenom={m.prenom} size={40}/>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…" style={{...S.input,marginBottom:16}}/>
+      <div style={S.secTitle}>Inscrits ({filtered.length})</div>
+      {filtered.map(p=>(
+        <div key={p.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+          <Avatar nom={p.nom} prenom={p.prenom} size={38}/>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{m.prenom} {m.nom}{m.is_admin&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginLeft:6,fontSize:8}}>Admin</span>}</div>
-            <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{m.role}</div>
-            {m.adresse&&<a href={`https://maps.google.com/?q=${encodeURIComponent(m.adresse)}`} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:C.secondary,textDecoration:"none",display:"block",marginTop:2}}>📍 {m.adresse}</a>}
-            {m.email&&<div style={{fontSize:10,color:C.grisChaud,marginTop:1}}>{m.email}</div>}
+            <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{p.prenom} {p.nom}</div>
+            <div style={{fontSize:11,color:C.grisChaud,marginTop:1}}>{p.email}</div>
           </div>
-          {isAdmin&&m.id!==currentUser?.id&&<AA onEdit={()=>setModal({t:"edit",data:m})} onDelete={()=>setConfirm({msg:`Supprimer ${m.prenom} ${m.nom} ?`,fn:async()=>{await supabase.from("membres").delete().eq("id",m.id);setMembres(prev=>prev.filter(x=>x.id!==m.id));showToast("Supprimé ✓");setConfirm(null);}})}/>}
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <button onClick={()=>toggleNewsletter(p)} title={p.newsletter?"Désabonner newsletter":"Abonner newsletter"} style={{background:p.newsletter?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:p.newsletter?"#fff":C.grisChaud}}>
+              {p.newsletter?"📧 NL":"📧"}
+            </button>
+          </div>
+          <AA onDelete={()=>setConfirm({msg:`Supprimer ${p.prenom} ${p.nom} ?`,fn:async()=>{await supabase.from("profiles").delete().eq("id",p.id);setProfiles(prev=>prev.filter(x=>x.id!==p.id));showToast("Supprimé ✓");setConfirm(null);}})}/>
         </div>
       ))}
-
-      {isAdmin&&<BtnPlus onClick={()=>setModal({t:"new"})}/>}
-      {modal==="profil"&&<MonProfil/>}
-      {modal?.t==="edit"&&<Form init={modal.data}/>}
-      {modal?.t==="new"&&<Form init={null}/>}
+      {filtered.length===0&&<div style={{textAlign:"center",color:C.grisChaud,fontSize:13,marginTop:24}}>Aucun inscrit pour l'instant</div>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
   );
@@ -1431,8 +1359,8 @@ function AuthScreen({onClose}) {
     setLoading(true);setError("");
     const{data,error:err}=await supabase.auth.signUp({email,password,options:{data:{prenom,nom}}});
     if(err){setError(err.message);setLoading(false);return;}
-    if(newsletter){
-      await supabase.from("newsletter_contacts").insert([{email,prenom,nom}]);
+    if(data.user){
+      await supabase.from("profiles").insert([{id:data.user.id,prenom,nom,email,newsletter}]);
     }
     setError("");
     onClose?.();
@@ -1618,7 +1546,7 @@ export default function App() {
         {tab==="agenda"   &&<AgendaTab isAdmin={isAdmin} showToast={showToast} allEvents={allEvents} setAllEvents={setAllEvents} currentUser={currentUser} apparence={apparence}/>}
         {tab==="medias"   &&<MediasTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence} currentUser={currentUser}/>}
         {tab==="messages" &&<MessagesTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser}/>}
-        {tab==="membres"  &&<MembresTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
+        {tab==="membres"  &&<MembresTab showToast={showToast}/>}
       </div>
 
       {/* Modal mon compte */}
