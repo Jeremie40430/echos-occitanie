@@ -673,7 +673,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
               <div key={sd.id} onClick={()=>setSousActif(sd)} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:40,height:40,borderRadius:10,background:C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📁</div>
                 <div style={{flex:1}}>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{sd.nom}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{sd.nom}{sd.date?` — ${fds(sd.date)}`:""}</div>
                   <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{fichiers.filter(f=>f.sous_dossier_id===sd.id).length} fichier(s)</div>
                 </div>
                 {isAdmin&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4}}>
