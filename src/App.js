@@ -245,11 +245,11 @@ const FileCard = ({nom,taille,url,typeLabel,onEdit,onDelete,isAdmin}) => (
 // ── ACCUEIL ────────────────────────────────────────────────────────
 function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
   const ap = apparence||{};
-  const today = new Date();
-  const upcoming = allEvents.filter(e=>new Date(e.date)>=today).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const upcoming = allEvents.filter(e=>e.date>=todayStr).sort((a,b)=>a.date.localeCompare(b.date));
   const nextRep = upcoming.find(e=>e.type==="repetition");
   const next3 = upcoming.filter(e=>e.type!=="repetition").slice(0,3);
-  const dernierConcours = allEvents.filter(e=>e.type==="concours"&&new Date(e.date)<today).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  const dernierConcours = allEvents.filter(e=>e.type==="concours"&&e.date<todayStr).sort((a,b)=>b.date.localeCompare(a.date))[0];
   const evLabels = {concert:"Concert",concours:"Concours",stage:"Stage",repetition:"Répétition"};
   const evColors = {concert:"#EDE7F6",concours:C.rougeClair,stage:C.bleuClair,repetition:C.bleuClair};
 
@@ -310,6 +310,68 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
   );
 }
 
+// ── Présence boutons (composant stable hors AgendaTab) ─────────────
+function PresenceBtns({ev,presences,setPresences,currentUser,showToast}) {
+  const p = presences.find(x=>x.evenement_id===ev.id&&x.membre_id===currentUser?.id);
+  const [open,setOpen] = useState(false);
+  const evPresences = presences.filter(x=>x.evenement_id===ev.id);
+  const oui = evPresences.filter(x=>x.statut==="oui");
+  const peutetre = evPresences.filter(x=>x.statut==="peut-etre");
+  const non = evPresences.filter(x=>x.statut==="non");
+  const counts = {oui:oui.length,peutetre:peutetre.length,non:non.length};
+
+  const setPresence = async(statut) => {
+    if(!currentUser) return;
+    const existing = presences.find(x=>x.evenement_id===ev.id&&x.membre_id===currentUser.id);
+    if(existing){
+      await supabase.from("presences").update({statut}).eq("id",existing.id);
+      setPresences(prev=>prev.map(x=>x.id===existing.id?{...x,statut}:x));
+    } else {
+      const{data}=await supabase.from("presences").insert([{evenement_id:ev.id,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,statut}]).select().single();
+      if(data) setPresences(prev=>[...prev,data]);
+    }
+    showToast("Présence enregistrée ✓");
+  };
+
+  const btn = (statut,label,color,bg) => (
+    <button onClick={()=>setPresence(statut)} style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1px solid ${p?.statut===statut?color:"#D4C9B0"}`,background:p?.statut===statut?bg:"transparent",color:p?.statut===statut?color:C.grisChaud,fontSize:11,fontWeight:p?.statut===statut?700:400,cursor:"pointer"}}>
+      {label}
+    </button>
+  );
+
+  const MiniListe = ({items,label,color,bg}) => items.length===0?null:(
+    <div style={{marginBottom:8}}>
+      <div style={{fontSize:10,fontWeight:700,color,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label} ({items.length})</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+        {items.map((x,i)=><span key={i} style={{background:bg,color,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:500}}>{x.membre_nom}</span>)}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #E8E0D0"}}>
+      <div style={{fontSize:10,color:C.grisChaud,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Ma présence</div>
+      <div style={{display:"flex",gap:6,marginBottom:8}}>
+        {btn("oui","Présent",C.vert,C.vertClair)}
+        {btn("non","Absent",C.secondary,C.rougeClair)}
+        {btn("peut-etre","Peut-être",C.bleuMoyen,C.bleuClair)}
+      </div>
+      <button onClick={()=>setOpen(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:6}}>
+        <span style={{fontSize:10,color:C.grisChaud}}>{counts.oui} présent(s) · {counts.peutetre} peut-être · {counts.non} absent(s)</span>
+        <span style={{fontSize:10,color:C.grisChaud,transform:open?"rotate(180deg)":"none",transition:"0.2s"}}>▾</span>
+      </button>
+      {open&&(
+        <div style={{marginTop:10,padding:"10px 12px",background:"#F5F0E8",borderRadius:10}}>
+          <MiniListe items={non} label="Absents" color={C.secondary} bg={C.rougeClair}/>
+          <MiniListe items={peutetre} label="Peut-être" color={C.bleuMoyen} bg={C.bleuClair}/>
+          <MiniListe items={oui} label="Présents" color={C.vert} bg={C.vertClair}/>
+          {evPresences.length===0&&<div style={{fontSize:12,color:C.grisChaud}}>Aucune réponse pour l'instant.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AGENDA ─────────────────────────────────────────────────────────
 function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparence}) {
   const [subTab,setSubTab] = useState("avenir");
@@ -317,32 +379,13 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
   const [confirm,setConfirm] = useState(null);
   const [presences,setPresences] = useState([]);
   const ap = apparence||{};
-  const today = new Date();
-  const upcoming = allEvents.filter(e=>new Date(e.date)>=today).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const past = allEvents.filter(e=>new Date(e.date)<today).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const upcoming = allEvents.filter(e=>e.date>=todayStr).sort((a,b)=>a.date.localeCompare(b.date));
+  const past = allEvents.filter(e=>e.date<todayStr).sort((a,b)=>b.date.localeCompare(a.date));
 
   useEffect(()=>{
     supabase.from("presences").select("*").then(({data})=>setPresences(data||[]));
   },[]);
-
-  const setPresence = async(evenementId, statut) => {
-    if(!currentUser) return;
-    const existing = presences.find(p=>p.evenement_id===evenementId&&p.membre_id===currentUser.id);
-    if(existing) {
-      await supabase.from("presences").update({statut}).eq("id",existing.id);
-      setPresences(prev=>prev.map(p=>p.id===existing.id?{...p,statut}:p));
-    } else {
-      const{data}=await supabase.from("presences").insert([{evenement_id:evenementId,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,statut}]).select().single();
-      if(data) setPresences(prev=>[...prev,data]);
-    }
-    showToast("Présence enregistrée ✓");
-  };
-
-  const getPresence = (evenementId) => presences.find(p=>p.evenement_id===evenementId&&p.membre_id===currentUser?.id);
-  const countPresences = (evenementId) => {
-    const evP = presences.filter(p=>p.evenement_id===evenementId);
-    return {oui:evP.filter(p=>p.statut==="oui").length, non:evP.filter(p=>p.statut==="non").length, peutetre:evP.filter(p=>p.statut==="peut-etre").length};
-  };
 
   const save = async(f)=>{
     const payload={type:f.type,titre:f.titre||"",date:f.date,heure:f.heure,lieu:f.lieu,note:f.note||"",favori:f.favori||false,note_admin:f.note_admin||"",place_globale:f.place_globale||"",place_radoux:f.place_radoux||"",place_basse:f.place_basse||""};
@@ -363,60 +406,6 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
     return [];
   };
   const list = getList();
-
-  const PresenceBtns = ({ev}) => {
-    const p = getPresence(ev.id);
-    const counts = countPresences(ev.id);
-    const [open,setOpen] = useState(false);
-    const evPresences = presences.filter(x=>x.evenement_id===ev.id);
-    const oui = evPresences.filter(x=>x.statut==="oui");
-    const peutetre = evPresences.filter(x=>x.statut==="peut-etre");
-    const non = evPresences.filter(x=>x.statut==="non");
-
-    const btn = (statut,label,color,bg) => (
-      <button onClick={()=>setPresence(ev.id,statut)} style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1px solid ${p?.statut===statut?color:"#D4C9B0"}`,background:p?.statut===statut?bg:"transparent",color:p?.statut===statut?color:C.grisChaud,fontSize:11,fontWeight:p?.statut===statut?700:400,cursor:"pointer"}}>
-        {label}
-      </button>
-    );
-
-    const MiniListe = ({items,label,color,bg}) => items.length===0?null:(
-      <div style={{marginBottom:8}}>
-        <div style={{fontSize:10,fontWeight:700,color,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label} ({items.length})</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-          {items.map((x,i)=>(
-            <span key={i} style={{background:bg,color,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:500}}>{x.membre_nom}</span>
-          ))}
-        </div>
-      </div>
-    );
-
-    return (
-      <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #E8E0D0"}}>
-        <div style={{fontSize:10,color:C.grisChaud,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Ma présence</div>
-        <div style={{display:"flex",gap:6,marginBottom:8}}>
-          {btn("oui","Présent",C.vert,C.vertClair)}
-          {btn("non","Absent",C.secondary,C.rougeClair)}
-          {btn("peut-etre","Peut-être",C.bleuMoyen,C.bleuClair)}
-        </div>
-
-        {/* Compteur cliquable */}
-        <button onClick={()=>setOpen(o=>!o)} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:10,color:C.grisChaud}}>{counts.oui} présent(s) · {counts.peutetre} peut-être · {counts.non} absent(s)</span>
-          <span style={{fontSize:10,color:C.grisChaud,transform:open?"rotate(180deg)":"none",transition:"0.2s"}}>▾</span>
-        </button>
-
-        {/* Liste dépliable */}
-        {open&&(
-          <div style={{marginTop:10,padding:"10px 12px",background:"#F5F0E8",borderRadius:10}}>
-            <MiniListe items={non} label="Absents" color={C.secondary} bg={C.rougeClair}/>
-            <MiniListe items={peutetre} label="Peut-être" color={C.bleuMoyen} bg={C.bleuClair}/>
-            <MiniListe items={oui} label="Présents" color={C.vert} bg={C.vertClair}/>
-            {evPresences.length===0&&<div style={{fontSize:12,color:C.grisChaud}}>Aucune réponse pour l'instant.</div>}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const EF=({init})=>{
     const [f,setF]=useState(init||{type:"repetition",titre:"",date:"",heure:"",lieu:"",note:"",place_globale:"",place_radoux:"",place_basse:""});
@@ -475,7 +464,7 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
               </div>
               {isAdmin&&<AA onEdit={()=>setModal(ev)} onDelete={()=>setConfirm(ev)}/>}
             </div>
-            {currentUser&&<PresenceBtns ev={ev}/>}
+            {currentUser&&<PresenceBtns ev={ev} presences={presences} setPresences={setPresences} currentUser={currentUser} showToast={showToast}/>}
           </div>
         ))
       )}
@@ -484,6 +473,105 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
       {modal&&<EF init={modal==="new"?null:modal}/>}
       {confirm&&<Confirm msg="Supprimer cet événement ?" onConfirm={async()=>{await supabase.from("evenements").delete().eq("id",confirm.id);setAllEvents(prev=>prev.filter(e=>e.id!==confirm.id));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
     </>
+  );
+}
+
+// ── Formulaires médias (composants stables hors MediasTab) ─────────
+function DF({init,dossiers,showToast,onClose,onSaved}) {
+  const [f,setF] = useState(init||{nom:"",categorie:"biblio"});
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const save=async()=>{
+    if(!f.nom) return;
+    if(f.id){
+      const{error}=await supabase.from("dossiers").update({nom:f.nom,categorie:f.categorie}).eq("id",f.id);
+      if(error){alert("Erreur: "+error.message);return;}
+    } else {
+      const{error}=await supabase.from("dossiers").insert([{nom:f.nom,categorie:f.categorie,emoji:"📁",color:C.primary,ordre:dossiers.length+1}]);
+      if(error){alert("Erreur: "+error.message);return;}
+    }
+    showToast(f.id?"Modifié ✓":"Dossier créé ✓");
+    await onSaved();
+    onClose();
+  };
+  return (
+    <Modal title={f.id?"Modifier dossier":"Nouveau dossier"} onClose={onClose}>
+      <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
+      <label style={S.label}>Type</label>
+      <select style={S.select} value={f.categorie} onChange={e=>s("categorie",e.target.value)}>
+        <option value="biblio">Médiathèque</option>
+        <option value="repetition">Répétitions</option>
+      </select>
+      <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
+      <button style={S.btnS} onClick={onClose}>Annuler</button>
+    </Modal>
+  );
+}
+
+function SDF({init,dossierId,showToast,onClose,onSaved}) {
+  const [f,setF] = useState(init||{nom:"",date:new Date().toISOString().split("T")[0]});
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const save=async()=>{
+    if(!f.nom) return;
+    if(f.id){
+      const{error}=await supabase.from("sous_dossiers").update({nom:f.nom,date:f.date}).eq("id",f.id);
+      if(error){alert("Erreur: "+error.message);return;}
+    } else {
+      const{error}=await supabase.from("sous_dossiers").insert([{dossier_id:dossierId,nom:f.nom,date:f.date||null}]);
+      if(error){alert("Erreur: "+error.message);return;}
+    }
+    showToast(f.id?"Modifié ✓":"Sous-dossier créé ✓");
+    await onSaved();
+    onClose();
+  };
+  return (
+    <Modal title={f.id?"Modifier":"Nouveau sous-dossier"} onClose={onClose}>
+      <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
+      <label style={S.label}>Date (optionnel)</label><input type="date" style={S.input} value={f.date||""} onChange={e=>s("date",e.target.value)}/>
+      <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
+      <button style={S.btnS} onClick={onClose}>Annuler</button>
+    </Modal>
+  );
+}
+
+function FF({init,actifId,sousActifId,showToast,onClose,onSaved}) {
+  const [f,setF] = useState(init||{morceau_id:actifId,sous_dossier_id:sousActifId||null,nom:"",type:"audio",url:"",taille:""});
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const save=async()=>{
+    if(!f.nom||!f.url) return;
+    const payload={morceau_id:f.morceau_id,sous_dossier_id:f.sous_dossier_id||null,nom:f.nom,type:f.type,url:f.url,taille:f.taille||"",favori:f.favori||false};
+    if(f.id){
+      const{error}=await supabase.from("fichiers").update(payload).eq("id",f.id);
+      if(error){alert("Erreur: "+error.message);return;}
+    } else {
+      const{error}=await supabase.from("fichiers").insert([payload]);
+      if(error){alert("Erreur: "+error.message);return;}
+    }
+    showToast("Fichier ajouté ✓");
+    await onSaved();
+    onClose();
+  };
+  return (
+    <Modal title={f.id?"Modifier fichier":"Nouveau fichier"} onClose={onClose}>
+      <label style={S.label}>Type</label>
+      <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}>
+        <option value="audio">Audio (MP3, M4A…)</option>
+        <option value="pdf">PDF / Partition</option>
+        <option value="midi">MIDI</option>
+        <option value="autre">Autre</option>
+      </select>
+      {!f.id&&(
+        <FileUpload
+          label="Choisir un fichier"
+          accept={f.type==="audio"?"audio/*":f.type==="pdf"?"application/pdf":"*"}
+          onUploaded={({url,nom,taille})=>{s("url",url);if(!f.nom)s("nom",nom);s("taille",taille);}}
+        />
+      )}
+      {f.url&&<div style={{fontSize:11,color:C.vert,marginBottom:8,background:C.vertClair,padding:"6px 10px",borderRadius:6}}>Fichier prêt</div>}
+      <label style={S.label}>Nom *</label>
+      <input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)} placeholder="Nom affiché"/>
+      <button style={{...S.btnP,opacity:(!f.nom||!f.url)?0.5:1}} onClick={save}>{f.id?"Enregistrer":"Ajouter"}</button>
+      <button style={S.btnS} onClick={onClose}>Annuler</button>
+    </Modal>
   );
 }
 
@@ -526,111 +614,6 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
     showToast(nv?"Ajouté aux favoris":"Retiré des favoris");
   };
 
-  // Formulaire dossier principal
-  const DF=({init})=>{
-    const [f,setF]=useState(init||{nom:"",categorie:"biblio"});
-    const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=async()=>{
-      if(!f.nom) return;
-      if(f.id){
-        const{error}=await supabase.from("dossiers").update({nom:f.nom,categorie:f.categorie}).eq("id",f.id);
-        if(error){alert("Erreur: "+error.message);return;}
-      } else {
-        const{error}=await supabase.from("dossiers").insert([{nom:f.nom,categorie:f.categorie,emoji:"📁",color:C.primary,ordre:dossiers.length+1}]);
-        if(error){alert("Erreur: "+error.message);return;}
-      }
-      showToast(f.id?"Modifié ✓":"Dossier créé ✓");
-      setModal(null);
-      await load();
-    };
-    return (
-      <Modal title={f.id?"Modifier dossier":"Nouveau dossier"} onClose={()=>setModal(null)}>
-        <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
-        <label style={S.label}>Type</label>
-        <select style={S.select} value={f.categorie} onChange={e=>s("categorie",e.target.value)}>
-          <option value="biblio">Médiathèque</option>
-          <option value="repetition">Répétitions</option>
-        </select>
-        <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
-        <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-      </Modal>
-    );
-  };
-
-  // Formulaire sous-dossier
-  const SDF=({init,dossierId})=>{
-    const [f,setF]=useState(init||{nom:"",date:new Date().toISOString().split("T")[0]});
-    const s=(k,v)=>setF(x=>({...x,[k]:v}));
-    const save=async()=>{
-      if(!f.nom) return;
-      if(f.id){
-        const{error}=await supabase.from("sous_dossiers").update({nom:f.nom,date:f.date}).eq("id",f.id);
-        if(error){alert("Erreur: "+error.message);return;}
-      } else {
-        const{error}=await supabase.from("sous_dossiers").insert([{dossier_id:dossierId,nom:f.nom,date:f.date||null}]);
-        if(error){alert("Erreur: "+error.message);return;}
-      }
-      showToast(f.id?"Modifié ✓":"Sous-dossier créé ✓");
-      setModal(null);
-      await load();
-    };
-    return (
-      <Modal title={f.id?"Modifier":"Nouveau sous-dossier"} onClose={()=>setModal(null)}>
-        <label style={S.label}>Nom *</label><input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)}/>
-        <label style={S.label}>Date (optionnel)</label><input type="date" style={S.input} value={f.date||""} onChange={e=>s("date",e.target.value)}/>
-        <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
-        <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-      </Modal>
-    );
-  };
-
-  // Formulaire fichier
-  const FF=({init,targetDossierId})=>{
-    const did = sousActif?.id ? null : (targetDossierId||actif?.id||dossiers[0]?.id||null);
-    const sdid = sousActif?.id||null;
-    const [f,setF]=useState(init||{morceau_id:did,sous_dossier_id:sdid,nom:"",type:"audio",url:"",taille:""});
-    const s=(k,v)=>setF(x=>({...x,[k]:v}));
-
-    const save=async()=>{
-      if(!f.nom||!f.url) return;
-      const payload={morceau_id:f.morceau_id,sous_dossier_id:f.sous_dossier_id||null,nom:f.nom,type:f.type,url:f.url,taille:f.taille||"",favori:f.favori||false};
-      if(f.id){
-        const{error}=await supabase.from("fichiers").update(payload).eq("id",f.id);
-        if(error){alert("Erreur: "+error.message);return;}
-      } else {
-        const{error}=await supabase.from("fichiers").insert([payload]);
-        if(error){alert("Erreur: "+error.message);return;}
-      }
-      showToast("Fichier ajouté ✓");
-      setModal(null);
-      await load();
-    };
-
-    return (
-      <Modal title={f.id?"Modifier fichier":"Nouveau fichier"} onClose={()=>setModal(null)}>
-        <label style={S.label}>Type</label>
-        <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}>
-          <option value="audio">Audio (MP3, M4A…)</option>
-          <option value="pdf">PDF / Partition</option>
-          <option value="midi">MIDI</option>
-          <option value="autre">Autre</option>
-        </select>
-        {!f.id&&(
-          <FileUpload
-            label="Choisir un fichier"
-            accept={f.type==="audio"?"audio/*":f.type==="pdf"?"application/pdf":"*"}
-            onUploaded={({url,nom,taille})=>{s("url",url);if(!f.nom)s("nom",nom);s("taille",taille);}}
-          />
-        )}
-        {f.url&&<div style={{fontSize:11,color:C.vert,marginBottom:8,background:C.vertClair,padding:"6px 10px",borderRadius:6}}>Fichier pret</div>}
-        <label style={S.label}>Nom *</label>
-        <input style={S.input} value={f.nom} onChange={e=>s("nom",e.target.value)} placeholder="Nom affiché"/>
-        <button style={{...S.btnP,opacity:(!f.nom||!f.url)?0.5:1}} onClick={save}>{f.id?"Enregistrer":"Ajouter"}</button>
-        <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
-      </Modal>
-    );
-  };
-
   const renderFichier = (f) => {
     if(f.type==="audio") return (
       <AudioCard key={f.id} nom={f.nom} taille={f.taille} favori={f.favori} url={f.url}
@@ -669,7 +652,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
         {contenu.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucun fichier — bouton + pour ajouter.</div>}
         {contenu.map(f=>renderFichier(f))}
         {isAdmin&&<BtnPlus onClick={()=>setModal({t:"fichier"})}/>}
-        {modal?.t==="fichier"&&<FF init={modal.data||null}/>}
+        {modal?.t==="fichier"&&<FF init={modal.data||null} actifId={actif?.id||null} sousActifId={sousActif?.id||null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
         {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
       </>
     );
@@ -690,7 +673,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
               <div key={sd.id} onClick={()=>setSousActif(sd)} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
                 <div style={{width:40,height:40,borderRadius:10,background:C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📁</div>
                 <div style={{flex:1}}>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{sd.nom}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13}}>{sd.nom}{sd.date?` — ${fds(sd.date)}`:""}</div>
                   <div style={{fontSize:11,color:C.grisChaud,marginTop:2}}>{fichiers.filter(f=>f.sous_dossier_id===sd.id).length} fichier(s)</div>
                 </div>
                 {isAdmin&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4}}>
@@ -717,8 +700,8 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
             <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
           </Modal>
         )}
-        {modal?.t==="sd"&&<SDF init={modal.data||null} dossierId={actif.id}/>}
-        {modal?.t==="fichier"&&<FF init={modal.data||null}/>}
+        {modal?.t==="sd"&&<SDF init={modal.data||null} dossierId={actif.id} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
+        {modal?.t==="fichier"&&<FF init={modal.data||null} actifId={actif?.id||null} sousActifId={null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
         {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
       </>
     );
@@ -743,7 +726,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
       </div>
 
       {isAdmin&&<BtnPlus onClick={()=>setModal({t:"dossier"})}/>}
-      {modal?.t==="dossier"&&<DF init={modal.data||null}/>}
+      {modal?.t==="dossier"&&<DF init={modal.data||null} dossiers={dossiers} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
   );
@@ -756,7 +739,8 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
   const [sondages,setSondages] = useState([]);
   const [reponses,setReponses] = useState([]);
   const [loading,setLoading] = useState(true);
-  const [texte,setTexte] = useState("");
+  const [texteDiscussion,setTexteDiscussion] = useState("");
+  const [texteAnnonce,setTexteAnnonce] = useState("");
   const [modal,setModal] = useState(null);
   const [confirm,setConfirm] = useState(null);
 
@@ -774,11 +758,12 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
   },[]);
 
   const envoyerMessage = async(type="message") => {
+    const texte = type==="annonce" ? texteAnnonce : texteDiscussion;
     if(!texte.trim()||!currentUser) return;
     const payload={contenu:texte,auteur_id:currentUser.id,auteur_nom:`${currentUser.prenom} ${currentUser.nom}`,type};
     const{data}=await supabase.from("messages").insert([payload]).select().single();
     if(data) setMessages(prev=>[data,...prev]);
-    setTexte("");
+    if(type==="annonce") setTexteAnnonce(""); else setTexteDiscussion("");
     showToast("Message envoyé ✓");
   };
 
@@ -848,12 +833,12 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
           {currentUser&&(
             <div style={{...S.card,marginBottom:16}}>
               <textarea
-                value={texte}
-                onChange={e=>setTexte(e.target.value)}
+                value={texteDiscussion}
+                onChange={e=>setTexteDiscussion(e.target.value)}
                 placeholder="Écrire un message…"
                 style={{...S.input,minHeight:70,resize:"vertical",marginBottom:8}}
               />
-              <button onClick={()=>envoyerMessage("message")} disabled={!texte.trim()} style={{...S.btnP,opacity:texte.trim()?1:0.5}}>
+              <button onClick={()=>envoyerMessage("message")} disabled={!texteDiscussion.trim()} style={{...S.btnP,opacity:texteDiscussion.trim()?1:0.5}}>
                 Envoyer
               </button>
             </div>
@@ -923,8 +908,8 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
           {isAdmin&&(
             <div style={{...S.card,marginBottom:16}}>
               <div style={{fontSize:12,color:C.grisChaud,marginBottom:8}}>Publier une annonce officielle</div>
-              <textarea value={texte} onChange={e=>setTexte(e.target.value)} placeholder="Texte de l'annonce…" style={{...S.input,minHeight:70,resize:"vertical",marginBottom:8}}/>
-              <button onClick={()=>envoyerMessage("annonce")} disabled={!texte.trim()} style={{...S.btnP,opacity:texte.trim()?1:0.5}}>Publier l'annonce</button>
+              <textarea value={texteAnnonce} onChange={e=>setTexteAnnonce(e.target.value)} placeholder="Texte de l'annonce…" style={{...S.input,minHeight:70,resize:"vertical",marginBottom:8}}/>
+              <button onClick={()=>envoyerMessage("annonce")} disabled={!texteAnnonce.trim()} style={{...S.btnP,opacity:texteAnnonce.trim()?1:0.5}}>Publier l'annonce</button>
             </div>
           )}
           {messages.filter(m=>m.type==="annonce").length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucune annonce.</div>}
@@ -1077,7 +1062,7 @@ function MonCompte({onClose,currentUser,setCurrentUser,showToast}) {
     role:currentUser?.role||"",
     adresse:currentUser?.adresse||"",
   });
-  const [mdp,setMdp] = useState({actuel:"",nouveau:"",confirm:""});
+  const [mdp,setMdp] = useState({nouveau:"",confirm:""});
   const [loading,setLoading] = useState(false);
   const [errMdp,setErrMdp] = useState("");
 
@@ -1104,7 +1089,7 @@ function MonCompte({onClose,currentUser,setCurrentUser,showToast}) {
     const{error}=await supabase.auth.updateUser({password:mdp.nouveau});
     if(error){setErrMdp("Erreur : "+error.message);setLoading(false);return;}
     showToast("Mot de passe modifié ✓");
-    setMdp({actuel:"",nouveau:"",confirm:""});
+    setMdp({nouveau:"",confirm:""});
     setLoading(false);
   };
 
@@ -1321,8 +1306,8 @@ function AuthScreen({onClose}) {
     if(!email||!password) return;
     setLoading(true);setError("");
     const{error:err}=await supabase.auth.signInWithPassword({email,password});
-    if(err) setError("Email ou mot de passe incorrect.");
-    setLoading(false);
+    if(err){setError("Email ou mot de passe incorrect.");setLoading(false);}
+    else onClose?.();
   };
   return (
     <div style={{padding:"20px 0"}}>
