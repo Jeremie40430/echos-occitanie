@@ -1520,7 +1520,12 @@ export default function App() {
   },[]);
 
   const loadUser = async(authUser) => {
-    const{data}=await supabase.from("membres").select("*").eq("id",authUser.id).maybeSingle();
+    // Chercher d'abord par ID (nouveaux comptes), puis par email (membres existants)
+    let{data}=await supabase.from("membres").select("*").eq("id",authUser.id).maybeSingle();
+    if(!data && authUser.email){
+      const res=await supabase.from("membres").select("*").eq("email",authUser.email).maybeSingle();
+      data=res.data;
+    }
     if(data){
       setIsAdmin(data.is_admin||false);
       setCurrentUser({...data,isMembre:true});
