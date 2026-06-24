@@ -1170,9 +1170,10 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
   );
 
   const MENU=[
-    {id:"identite", e:"🏷️", l:"Identité du groupe", d:"Nom, sous-titre, logo"},
-    {id:"couleurs", e:"🎨", l:"Couleurs",            d:"Header, accent, boutons"},
-    {id:"audio",    e:"🔴", l:"Lecteur audio",       d:"Couleur et icône du bouton play"},
+    {id:"identite",  e:"🏷️", l:"Identité du groupe", d:"Nom, sous-titre, logo"},
+    {id:"couleurs",  e:"🎨", l:"Couleurs",            d:"Header, accent, boutons"},
+    {id:"audio",     e:"🔴", l:"Lecteur audio",       d:"Couleur et icône du bouton play"},
+    {id:"inscrits",  e:"👥", l:"Inscrits",            d:"Liste des comptes créés"},
   ];
 
   if(!page) return (
@@ -1268,6 +1269,13 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
       <ColorRow options={COLS_BULLE} k="bulleColor"/>
       <button style={S.btnP} onClick={save}>Enregistrer</button>
       <button style={S.btnS} onClick={()=>setPage(null)}>Retour</button>
+    </Modal>
+  );
+
+  if(page==="inscrits") return (
+    <Modal title="Inscrits" onClose={()=>setPage(null)}>
+      <MembresTab showToast={showToast}/>
+      <button style={{...S.btnS,marginTop:12}} onClick={()=>setPage(null)}>Retour</button>
     </Modal>
   );
 
@@ -1415,7 +1423,6 @@ const TABS=[
   {id:"agenda",   l:"Agenda",   ic:<IcCal/>},
   {id:"medias",   l:"Medias",   ic:<IcMedia/>},
   {id:"messages", l:"Messages", ic:<IcMsg/>},
-  {id:"membres",  l:"Membres",  ic:<IcMembers/>},
 ];
 
 export default function App() {
@@ -1458,10 +1465,15 @@ export default function App() {
       setIsAdmin(data.is_admin||false);
       setCurrentUser({...data,isMembre:true});
     } else {
-      // Compte connecté mais pas dans le groupe
       const meta = authUser.user_metadata||{};
       setIsAdmin(false);
       setCurrentUser({id:authUser.id,email:authUser.email,prenom:meta.prenom||"",nom:meta.nom||"",role:"",is_admin:false,isMembre:false});
+    }
+    // Créer le profil si absent (première connexion ou compte existant avant profiles)
+    const{data:prof}=await supabase.from("profiles").select("id").eq("id",authUser.id).maybeSingle();
+    if(!prof){
+      const meta=authUser.user_metadata||{};
+      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||meta.prenom||"",nom:data?.nom||meta.nom||"",email:authUser.email||"",newsletter:false}]);
     }
   };
 
@@ -1523,11 +1535,7 @@ export default function App() {
 
         {/* Onglets */}
         <div style={{display:"flex"}}>
-          {TABS.filter(t=>{
-            if(!session && ["messages","membres"].includes(t.id)) return false;
-            if(t.id==="membres" && !isAdmin) return false;
-            return true;
-          }).map(t=>{
+          {TABS.filter(t=>session||t.id!=="messages").map(t=>{
             const active=tab===t.id;
             return (
               <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 2px 10px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?aColor:"#6B8AAA",position:"relative",transition:"color 0.18s"}}>
@@ -1546,7 +1554,6 @@ export default function App() {
         {tab==="agenda"   &&<AgendaTab isAdmin={isAdmin} showToast={showToast} allEvents={allEvents} setAllEvents={setAllEvents} currentUser={currentUser} apparence={apparence}/>}
         {tab==="medias"   &&<MediasTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence} currentUser={currentUser}/>}
         {tab==="messages" &&<MessagesTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser}/>}
-        {tab==="membres"  &&<MembresTab showToast={showToast}/>}
       </div>
 
       {/* Modal mon compte */}
