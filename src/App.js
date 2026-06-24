@@ -1595,7 +1595,11 @@ export default function App() {
 
         {/* Onglets */}
         <div style={{display:"flex"}}>
-          {TABS.filter(t=>session||!["messages","membres"].includes(t.id)).map(t=>{
+          {TABS.filter(t=>{
+            if(!session && ["messages","membres"].includes(t.id)) return false;
+            if(t.id==="membres" && !isAdmin) return false;
+            return true;
+          }).map(t=>{
             const active=tab===t.id;
             return (
               <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 2px 10px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?aColor:"#6B8AAA",position:"relative",transition:"color 0.18s"}}>
