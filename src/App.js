@@ -25,6 +25,17 @@ const SUB = {
 const fd  = (d) => new Date(d).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
 const fds = (d) => new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
 const fdt = (d) => new Date(d).toLocaleDateString("fr-FR",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+const timeAgo = (d) => {
+  const min = Math.floor((Date.now()-new Date(d).getTime())/60000);
+  if(min<1) return "à l'instant";
+  if(min<60) return `il y a ${min} min`;
+  const h=Math.floor(min/60); if(h<24) return `il y a ${h}h`;
+  const j=Math.floor(h/24); return j===1?"hier":`il y a ${j}j`;
+};
+
+const creerNotif = async(titre,type="info") => {
+  try { await supabase.from("notifications").insert([{titre,type}]); } catch(e){}
+};
 
 const S = {
   card:  { background:C.blanc, border:"1px solid #D4C9B0", borderRadius:12, padding:"12px 14px", marginBottom:10, boxShadow:"0 1px 4px rgba(26,31,110,0.06)" },
@@ -420,7 +431,7 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
   const save = async(f)=>{
     const payload={type:f.type,titre:f.titre||"",date:f.date,heure:f.heure,lieu:f.lieu,note:f.note||"",favori:f.favori||false,note_admin:f.note_admin||"",place_globale:f.place_globale||"",place_radoux:f.place_radoux||"",place_basse:f.place_basse||""};
     if(f.id){await supabase.from("evenements").update(payload).eq("id",f.id);setAllEvents(prev=>prev.map(e=>e.id===f.id?{...e,...payload}:e));}
-    else{const{data}=await supabase.from("evenements").insert([payload]).select().single();if(data)setAllEvents(prev=>[...prev,data]);}
+    else{const{data}=await supabase.from("evenements").insert([payload]).select().single();if(data){setAllEvents(prev=>[...prev,data]);await creerNotif(`📅 Nouvel événement : ${payload.titre||payload.type} le ${fds(payload.date)}`,"evenement");}}
     showToast(f.id?"Modifié ✓":"Ajouté ✓");setModal(null);
   };
 
@@ -520,6 +531,7 @@ function DF({init,dossiers,showToast,onClose,onSaved}) {
       if(error){alert("Erreur: "+error.message);return;}
     }
     showToast(f.id?"Modifié ✓":"Dossier créé ✓");
+    if(!f.id) await creerNotif(`📁 Nouveau dossier "${f.nom}" créé`,"dossier");
     await onSaved();
     onClose();
   };
@@ -550,6 +562,7 @@ function SDF({init,dossierId,showToast,onClose,onSaved}) {
       if(error){alert("Erreur: "+error.message);return;}
     }
     showToast(f.id?"Modifié ✓":"Sous-dossier créé ✓");
+    if(!f.id) await creerNotif(`📁 Nouveau sous-dossier "${f.nom}" créé`,"dossier");
     await onSaved();
     onClose();
   };
@@ -577,6 +590,7 @@ function FF({init,actifId,sousActifId,showToast,onClose,onSaved}) {
       if(error){alert("Erreur: "+error.message);return;}
     }
     showToast("Fichier ajouté ✓");
+    if(!f.id) await creerNotif(`🎵 "${f.nom}" a été ajouté`,"fichier");
     await onSaved();
     onClose();
   };
@@ -794,6 +808,7 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
     const{data}=await supabase.from("messages").insert([payload]).select().single();
     if(data) setMessages(prev=>[data,...prev]);
     if(type==="annonce") setTexteAnnonce(""); else setTexteDiscussion("");
+    await creerNotif(type==="annonce"?`📢 Nouvelle annonce publiée`:`💬 Nouveau message dans la discussion`,type==="annonce"?"annonce":"message");
     showToast("Message envoyé ✓");
   };
 
@@ -1326,12 +1341,76 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
   return null;
 }
 
+// ── NOTIFICATIONS ──────────────────────────────────────────────────
+const NOTIF_ICONS = {fichier:"🎵",dossier:"📁",evenement:"📅",message:"💬",annonce:"📢",info:"🔔"};
+
+function NotifBell({currentUser,setCurrentUser}) {
+  const [open,setOpen] = useState(false);
+  const [notifs,setNotifs] = useState([]);
+
+  useEffect(()=>{
+    supabase.from("notifications").select("*").order("created_at",{ascending:false}).limit(30)
+      .then(({data})=>setNotifs(data||[]));
+    const ch = supabase.channel("notifs-rt")
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},
+        p=>setNotifs(prev=>[p.new,...prev.slice(0,29)]))
+      .subscribe();
+    return ()=>supabase.removeChannel(ch);
+  },[]);
+
+  const unread = notifs.filter(n=>
+    !currentUser?.notifs_vues_at||new Date(n.created_at)>new Date(currentUser.notifs_vues_at)
+  ).length;
+
+  const handleOpen = async()=>{
+    const wasOpen=open; setOpen(o=>!o);
+    if(!wasOpen&&currentUser&&unread>0){
+      const now=new Date().toISOString();
+      await supabase.from("membres").update({notifs_vues_at:now}).eq("id",currentUser.id);
+      setCurrentUser(u=>({...u,notifs_vues_at:now}));
+    }
+  };
+
+  return (
+    <>
+      <button onClick={handleOpen} style={{position:"relative",background:"#ffffff22",border:"none",cursor:"pointer",width:34,height:34,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>
+        🔔
+        {unread>0&&<span style={{position:"absolute",top:-2,right:-2,background:C.secondary,color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{unread>9?"9+":unread}</span>}
+      </button>
+      {open&&(
+        <>
+          <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:149}}/>
+          <div style={{position:"fixed",top:64,right:8,left:8,maxWidth:420,margin:"0 auto",zIndex:150,background:C.blanc,borderRadius:16,boxShadow:"0 8px 32px rgba(26,31,110,0.18)",overflow:"hidden",maxHeight:"60vh",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"14px 16px",borderBottom:"1px solid #E8E0D0",fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:15}}>Notifications</div>
+            <div style={{overflowY:"auto",flex:1}}>
+              {notifs.length===0&&<div style={{padding:"24px",textAlign:"center",color:C.grisChaud,fontSize:13}}>Aucune notification</div>}
+              {notifs.map(n=>(
+                <div key={n.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:"1px solid #F0EAE0"}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{NOTIF_ICONS[n.type]||"🔔"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:C.primary,lineHeight:1.4}}>{n.titre}</div>
+                    <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>{timeAgo(n.created_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 // ── AUTH ───────────────────────────────────────────────────────────
 function AuthScreen({onClose}) {
+  const [mode,setMode] = useState("login");
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
+  const [prenom,setPrenom] = useState("");
+  const [nom,setNom] = useState("");
   const [error,setError] = useState("");
   const [loading,setLoading] = useState(false);
+
   const login = async() => {
     if(!email||!password) return;
     setLoading(true);setError("");
@@ -1339,14 +1418,50 @@ function AuthScreen({onClose}) {
     if(err){setError("Email ou mot de passe incorrect.");setLoading(false);}
     else onClose?.();
   };
+
+  const signup = async() => {
+    if(!prenom||!nom||!email||!password){setError("Tous les champs sont requis");return;}
+    if(password.length<6){setError("Minimum 6 caractères");return;}
+    setLoading(true);setError("");
+    const{data,error:err}=await supabase.auth.signUp({email,password});
+    if(err){setError(err.message);setLoading(false);return;}
+    if(data.user){
+      const{data:existing}=await supabase.from("membres").select("id").eq("email",email).maybeSingle();
+      if(!existing){
+        await supabase.from("membres").insert([{id:data.user.id,prenom,nom,email,is_admin:false,role:""}]);
+      }
+    }
+    onClose?.();
+  };
+
+  const errBox = error&&<div style={{background:C.rougeClair,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.secondary,marginBottom:10}}>{error}</div>;
+
+  if(mode==="signup") return (
+    <div style={{padding:"20px 0"}}>
+      <label style={S.label}>Prénom *</label>
+      <input style={S.input} value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Prénom"/>
+      <label style={S.label}>Nom *</label>
+      <input style={S.input} value={nom} onChange={e=>setNom(e.target.value)} placeholder="Nom"/>
+      <label style={S.label}>Email *</label>
+      <input type="email" style={S.input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="ton@email.fr"/>
+      <label style={S.label}>Mot de passe *</label>
+      <input type="password" style={S.input} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Minimum 6 caractères"/>
+      {errBox}
+      <button onClick={signup} disabled={loading} style={S.btnP}>{loading?"Création…":"Créer mon compte"}</button>
+      <button onClick={()=>{setMode("login");setError("");}} style={S.btnS}>J'ai déjà un compte</button>
+      {onClose&&<button onClick={onClose} style={S.btnS}>Annuler</button>}
+    </div>
+  );
+
   return (
     <div style={{padding:"20px 0"}}>
       <label style={S.label}>Email</label>
       <input type="email" placeholder="ton@email.fr" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={S.input}/>
       <label style={S.label}>Mot de passe</label>
       <input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={S.input}/>
-      {error&&<div style={{background:C.rougeClair,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.secondary,marginBottom:10}}>{error}</div>}
+      {errBox}
       <button onClick={login} disabled={loading} style={S.btnP}>{loading?"Connexion…":"Se connecter"}</button>
+      <button onClick={()=>{setMode("signup");setError("");}} style={S.btnS}>Créer un compte</button>
       {onClose&&<button onClick={onClose} style={S.btnS}>Annuler</button>}
     </div>
   );
@@ -1444,6 +1559,7 @@ export default function App() {
                 {isAdmin&&(
                   <button onClick={()=>setAdminModal(true)} style={{background:C.secondary+"33",border:"none",cursor:"pointer",padding:"4px 10px",borderRadius:20,color:aColor,fontSize:10,fontWeight:700}}>Admin</button>
                 )}
+                <NotifBell currentUser={currentUser} setCurrentUser={setCurrentUser}/>
                 <button onClick={()=>setCompteModal(true)} style={{width:32,height:32,borderRadius:"50%",background:"#ffffff22",border:"2px solid #ffffff44",cursor:"pointer",color:"#fff",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {currentUser ? `${currentUser.prenom?.[0]||""}${currentUser.nom?.[0]||""}` : "?"}
                 </button>
@@ -1458,7 +1574,7 @@ export default function App() {
 
         {/* Onglets */}
         <div style={{display:"flex"}}>
-          {TABS.map(t=>{
+          {TABS.filter(t=>session||!["messages","membres"].includes(t.id)).map(t=>{
             const active=tab===t.id;
             return (
               <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"8px 2px 10px",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?aColor:"#6B8AAA",position:"relative",transition:"color 0.18s"}}>
