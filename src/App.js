@@ -279,7 +279,7 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
             <div style={{background:C.rougeClair,borderRadius:14,padding:"18px 12px",textAlign:"center",marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:700,color:C.secondary,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Classement général</div>
               <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.secondary,fontSize:32,lineHeight:1}}>{dernierConcours.place_globale}</div>
-              <div style={{fontSize:12,color:C.secondary,marginTop:4,opacity:0.8}></div>
+              <div style={{fontSize:12,color:C.secondary,marginTop:4,opacity:0.8}}></div>
             </div>
           )}
 
@@ -290,14 +290,14 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
                 <div style={{background:C.bleuClair,borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
                   <div style={{fontSize:10,fontWeight:700,color:C.primary,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Radoux</div>
                   <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:24,lineHeight:1}}>{dernierConcours.place_radoux}</div>
-                  <div style={{fontSize:11,color:C.grisChaud,marginTop:3}></div>
+                  <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}></div>
                 </div>
               )}
               {dernierConcours.place_basse&&(
                 <div style={{background:"#EDE7F6",borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
                   <div style={{fontSize:10,fontWeight:700,color:"#4527A0",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Basse</div>
                   <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4527A0",fontSize:24,lineHeight:1}}>{dernierConcours.place_basse}</div>
-                  <div style={{fontSize:11,color:"#7B5EA7",marginTop:3}></div>
+                  <div style={{fontSize:11,color:"#7B5EA7",marginTop:3}}></div>
                 </div>
               )}
             </div>
