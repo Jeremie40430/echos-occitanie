@@ -930,6 +930,7 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
                     const total = repSondage.length||1;
                     const pct = Math.round((nb/total)*100);
                     const selected = maReponse?.reponse===opt;
+                    const votants = repSondage.filter(r=>r.reponse===opt);
                     return (
                       <div key={i}>
                         <button onClick={()=>currentUser&&repondre(s.id,opt)} style={{width:"100%",padding:"10px 12px",borderRadius:9,border:`2px solid ${selected?C.primary:"#D4C9B0"}`,background:selected?C.bleuClair:C.blanc,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,fontWeight:selected?700:400,color:C.primary}}>
@@ -939,6 +940,9 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
                         <div style={{height:3,background:"#E8E0D0",borderRadius:2,marginTop:3}}>
                           <div style={{height:"100%",width:`${pct}%`,background:C.primary,borderRadius:2,transition:"width 0.4s"}}/>
                         </div>
+                        {votants.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5,paddingLeft:2}}>
+                          {votants.map(r=><span key={r.id} style={{fontSize:10,background:"#F0EDE6",borderRadius:6,padding:"2px 7px",color:C.primary}}>{r.membre_nom}</span>)}
+                        </div>}
                       </div>
                     );
                   })}
