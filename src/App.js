@@ -1003,6 +1003,13 @@ function MembresTab({showToast}) {
     showToast(nv?"Abonné newsletter ✓":"Désabonné newsletter");
   };
 
+  const toggleBloque = async(p) => {
+    const nv = !p.bloque;
+    await supabase.from("profiles").update({bloque:nv}).eq("id",p.id);
+    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,bloque:nv}:x));
+    showToast(nv?"Compte bloqué 🚫":"Compte débloqué ✓");
+  };
+
   if(loading) return <Spinner/>;
 
   return (
@@ -1010,18 +1017,18 @@ function MembresTab({showToast}) {
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…" style={{...S.input,marginBottom:16}}/>
       <div style={S.secTitle}>Inscrits ({filtered.length})</div>
       {filtered.map(p=>(
-        <div key={p.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
+        <div key={p.id} style={{...S.card,display:"flex",alignItems:"center",gap:8,opacity:p.bloque?0.6:1}}>
           <Avatar nom={p.nom} prenom={p.prenom} size={38}/>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{p.prenom} {p.nom}</div>
+            <div style={{fontWeight:700,color:C.primary,fontSize:13}}>
+              {p.prenom} {p.nom}
+              {p.bloque&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginLeft:6,fontSize:9}}>Bloqué</span>}
+            </div>
             <div style={{fontSize:11,color:C.grisChaud,marginTop:1}}>{p.email}</div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-            <button onClick={()=>toggleNewsletter(p)} title={p.newsletter?"Désabonner newsletter":"Abonner newsletter"} style={{background:p.newsletter?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:11,color:p.newsletter?"#fff":C.grisChaud}}>
-              {p.newsletter?"📧 NL":"📧"}
-            </button>
-          </div>
-          <AA onDelete={()=>setConfirm({msg:`Supprimer ${p.prenom} ${p.nom} ?`,fn:async()=>{await supabase.from("profiles").delete().eq("id",p.id);setProfiles(prev=>prev.filter(x=>x.id!==p.id));showToast("Supprimé ✓");setConfirm(null);}})}/>
+          <button onClick={()=>toggleNewsletter(p)} title="Newsletter" style={{background:p.newsletter?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:13,color:p.newsletter?"#fff":C.grisChaud}}>📧</button>
+          <button onClick={()=>toggleBloque(p)} title={p.bloque?"Débloquer":"Bloquer"} style={{background:p.bloque?"#E8E0D0":C.rougeClair,border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:14}}>{p.bloque?"🔓":"🚫"}</button>
+          <button onClick={()=>setConfirm({msg:`Supprimer ${p.prenom} ${p.nom} ?`,fn:async()=>{await supabase.from("profiles").delete().eq("id",p.id);setProfiles(prev=>prev.filter(x=>x.id!==p.id));showToast("Supprimé ✓");setConfirm(null);}})} style={{background:C.rougeClair,border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:14}}>🗑</button>
         </div>
       ))}
       {filtered.length===0&&<div style={{textAlign:"center",color:C.grisChaud,fontSize:13,marginTop:24}}>Aucun inscrit pour l'instant</div>}
@@ -1469,11 +1476,15 @@ export default function App() {
       setIsAdmin(false);
       setCurrentUser({id:authUser.id,email:authUser.email,prenom:meta.prenom||"",nom:meta.nom||"",role:"",is_admin:false,isMembre:false});
     }
-    // Créer le profil si absent (première connexion ou compte existant avant profiles)
-    const{data:prof}=await supabase.from("profiles").select("id").eq("id",authUser.id).maybeSingle();
+    // Créer le profil si absent, ou vérifier le blocage
+    const{data:prof}=await supabase.from("profiles").select("id,bloque").eq("id",authUser.id).maybeSingle();
     if(!prof){
       const meta=authUser.user_metadata||{};
-      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||meta.prenom||"",nom:data?.nom||meta.nom||"",email:authUser.email||"",newsletter:false}]);
+      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||meta.prenom||"",nom:data?.nom||meta.nom||"",email:authUser.email||"",newsletter:false,bloque:false}]);
+    } else if(prof.bloque){
+      await supabase.auth.signOut();
+      alert("Votre compte a été bloqué. Contactez l'administrateur.");
+      return;
     }
   };
 
