@@ -519,15 +519,15 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
 
 // ── Formulaires médias (composants stables hors MediasTab) ─────────
 function DF({init,dossiers,showToast,onClose,onSaved}) {
-  const [f,setF] = useState(init||{nom:"",categorie:"biblio"});
+  const [f,setF] = useState(init||{nom:"",categorie:"biblio",prive:false});
   const s=(k,v)=>setF(x=>({...x,[k]:v}));
   const save=async()=>{
     if(!f.nom) return;
     if(f.id){
-      const{error}=await supabase.from("dossiers").update({nom:f.nom,categorie:f.categorie}).eq("id",f.id);
+      const{error}=await supabase.from("dossiers").update({nom:f.nom,categorie:f.categorie,prive:f.prive||false}).eq("id",f.id);
       if(error){alert("Erreur: "+error.message);return;}
     } else {
-      const{error}=await supabase.from("dossiers").insert([{nom:f.nom,categorie:f.categorie,emoji:"📁",color:C.primary,ordre:dossiers.length+1}]);
+      const{error}=await supabase.from("dossiers").insert([{nom:f.nom,categorie:f.categorie,prive:f.prive||false,emoji:"📁",color:C.primary,ordre:dossiers.length+1}]);
       if(error){alert("Erreur: "+error.message);return;}
     }
     showToast(f.id?"Modifié ✓":"Dossier créé ✓");
@@ -543,6 +543,10 @@ function DF({init,dossiers,showToast,onClose,onSaved}) {
         <option value="biblio">Médiathèque</option>
         <option value="repetition">Répétitions</option>
       </select>
+      <div style={{display:"flex",alignItems:"center",gap:10,margin:"12px 0"}}>
+        <input type="checkbox" id="prive" checked={!!f.prive} onChange={e=>s("prive",e.target.checked)} style={{width:16,height:16,cursor:"pointer"}}/>
+        <label htmlFor="prive" style={{fontSize:13,color:C.primary,cursor:"pointer"}}>🔒 Dossier privé (membres du groupe uniquement)</label>
+      </div>
       <button style={S.btnP} onClick={save}>{f.id?"Enregistrer":"Créer"}</button>
       <button style={S.btnS} onClick={onClose}>Annuler</button>
     </Modal>
@@ -620,7 +624,7 @@ function FF({init,actifId,sousActifId,showToast,onClose,onSaved}) {
 }
 
 // ── MEDIAS ─────────────────────────────────────────────────────────
-function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
+function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser}) {
   const ap = apparence||{};
   const [dossiers,setDossiers] = useState([]);
   const [sousDossiers,setSousDossiers] = useState([]);
@@ -639,13 +643,14 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence}) {
       supabase.from("sous_dossiers").select("*").order("created_at",{ascending:false}),
       supabase.from("fichiers").select("*"),
     ]);
-    setDossiers(d||[]);
+    const isMembre = currentUser?.isMembre||currentUser?.is_admin;
+    setDossiers((d||[]).filter(x=>!x.prive||isMembre));
     setSousDossiers(sd||[]);
     const mapped=(f||[]).map(x=>({...x,dossier_id:x.morceau_id}));
     setFichiers(mapped);
     setFavoris(mapped.filter(x=>x.favori));
     setLoading(false);
-  },[setFavoris]);
+  },[setFavoris,currentUser]);
 
   useEffect(()=>{load();},[load]);
 
@@ -1408,6 +1413,7 @@ function AuthScreen({onClose}) {
   const [password,setPassword] = useState("");
   const [prenom,setPrenom] = useState("");
   const [nom,setNom] = useState("");
+  const [newsletter,setNewsletter] = useState(false);
   const [error,setError] = useState("");
   const [loading,setLoading] = useState(false);
 
@@ -1425,6 +1431,9 @@ function AuthScreen({onClose}) {
     setLoading(true);setError("");
     const{data,error:err}=await supabase.auth.signUp({email,password,options:{data:{prenom,nom}}});
     if(err){setError(err.message);setLoading(false);return;}
+    if(newsletter){
+      await supabase.from("newsletter_contacts").insert([{email,prenom,nom}]);
+    }
     setError("");
     onClose?.();
   };
@@ -1441,6 +1450,10 @@ function AuthScreen({onClose}) {
       <input type="email" style={S.input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="ton@email.fr"/>
       <label style={S.label}>Mot de passe *</label>
       <input type="password" style={S.input} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Minimum 6 caractères"/>
+      <div style={{display:"flex",alignItems:"center",gap:10,margin:"12px 0"}}>
+        <input type="checkbox" id="newsletter" checked={newsletter} onChange={e=>setNewsletter(e.target.checked)} style={{width:16,height:16,cursor:"pointer"}}/>
+        <label htmlFor="newsletter" style={{fontSize:12,color:C.grisChaud,cursor:"pointer"}}>Je souhaite recevoir la newsletter du groupe</label>
+      </div>
       {errBox}
       <button onClick={signup} disabled={loading} style={S.btnP}>{loading?"Création…":"Créer mon compte"}</button>
       <button onClick={()=>{setMode("login");setError("");}} style={S.btnS}>J'ai déjà un compte</button>
@@ -1594,7 +1607,7 @@ export default function App() {
       <div style={{padding:"18px 14px 80px"}}>
         {tab==="accueil"  &&<AccueilTab favoris={favoris} allEvents={allEvents} apparence={apparence} currentUser={currentUser} showToast={showToast}/>}
         {tab==="agenda"   &&<AgendaTab isAdmin={isAdmin} showToast={showToast} allEvents={allEvents} setAllEvents={setAllEvents} currentUser={currentUser} apparence={apparence}/>}
-        {tab==="medias"   &&<MediasTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence}/>}
+        {tab==="medias"   &&<MediasTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence} currentUser={currentUser}/>}
         {tab==="messages" &&<MessagesTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser}/>}
         {tab==="membres"  &&<MembresTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
       </div>
