@@ -5,6 +5,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Safe area pour iPhone Dynamic Island / notch en mode PWA */
+  padding-top: env(safe-area-inset-top);
+  background-color: #1A1F6E;
 }
 
 code {

@@ -1752,7 +1752,7 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none} :root{--bg:${fondColor};--card:${cardColor};--radius:${cardRadius}px}`}</style>
 
       {/* Header */}
-      <div style={{background:hColor,padding:"14px 16px 0",paddingTop:"max(14px, env(safe-area-inset-top))",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
+      <div style={{background:hColor,padding:"14px 16px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {apparence.logoUrl
