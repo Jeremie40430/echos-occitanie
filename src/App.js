@@ -1783,8 +1783,8 @@ export default function App() {
     <div style={{minHeight:"100vh",background:fondColor,fontFamily:"Inter,sans-serif",maxWidth:480,margin:"0 auto"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none} :root{--bg:${fondColor};--card:${cardColor};--radius:${cardRadius}px}`}</style>
 
-      {/* Header */}
-      <div style={{background:hColor,padding:"14px 16px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
+      {/* Header fixe */}
+      <div style={{background:hColor,padding:"14px 16px 0",position:"fixed",top:0,left:0,right:0,zIndex:100,boxShadow:"0 2px 16px rgba(26,31,110,0.3)",maxWidth:480,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {apparence.logoUrl
@@ -1830,8 +1830,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* Contenu */}
-      <div style={{padding:"18px 14px 80px"}}>
+      {/* Contenu — décalé sous le header fixe (~120px) */}
+      <div style={{padding:"18px 14px 80px",paddingTop:"calc(120px + env(safe-area-inset-top))"}}>
         {tab==="accueil"  &&<AccueilTab favoris={favoris} allEvents={allEvents} apparence={apparence} currentUser={currentUser} showToast={showToast}/>}
         {tab==="agenda"   &&<AgendaTab isAdmin={isAdmin} showToast={showToast} allEvents={allEvents} setAllEvents={setAllEvents} currentUser={currentUser} apparence={apparence}/>}
         {tab==="medias"   &&<MediasTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence} currentUser={currentUser}/>}
