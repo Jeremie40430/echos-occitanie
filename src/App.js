@@ -1054,9 +1054,11 @@ function MessagesPrivesTab({currentUser,showToast}) {
     const{error}=await supabase.from("messages_prives").insert([{from_id:currentUser.id,from_nom,to_id:dest,to_nom,contenu:contenu.trim()}]);
     if(error){showToast("Erreur envoi");setSending(false);return;}
     showToast("Message envoyé ✓");
-    setContenu("");setDest("");
+    setContenu("");
     await charger();
-    setVue("inbox");
+    setConvPartner({id:dest,nom:to_nom});
+    setDest("");
+    setVue("conv");
     setSending(false);
   };
 
