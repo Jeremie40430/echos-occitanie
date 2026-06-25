@@ -1784,7 +1784,7 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none} :root{--bg:${fondColor};--card:${cardColor};--radius:${cardRadius}px}`}</style>
 
       {/* Header fixe */}
-      <div style={{background:hColor,padding:"14px 16px 0",position:"fixed",top:0,left:0,right:0,zIndex:100,boxShadow:"0 2px 16px rgba(26,31,110,0.3)",maxWidth:480,margin:"0 auto"}}>
+      <div style={{background:hColor,padding:"14px 16px 0",paddingTop:"calc(14px + env(safe-area-inset-top))",position:"fixed",top:0,left:0,right:0,zIndex:100,boxShadow:"0 2px 16px rgba(26,31,110,0.3)",maxWidth:480,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {apparence.logoUrl
