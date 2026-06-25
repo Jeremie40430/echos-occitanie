@@ -1237,7 +1237,7 @@ function MonCompte({onClose,currentUser,setCurrentUser,showToast}) {
     if(!f.prenom||!f.nom) return;
     setLoading(true);
     const payload={prenom:f.prenom,nom:f.nom,role:f.role||"",adresse:f.adresse||""};
-    const{error}=await supabase.from("membres").update(payload).eq("id",currentUser.id);
+    const{error}=await supabase.from("membres").update(payload).eq("id",currentUser.membreId||currentUser.id);
     if(error){alert("Erreur: "+error.message);setLoading(false);return;}
     setCurrentUser(u=>({...u,...payload}));
     showToast("Profil mis à jour ✓");
@@ -1543,7 +1543,7 @@ function NotifBell({currentUser,setCurrentUser}) {
     const wasOpen=open; setOpen(o=>!o);
     if(!wasOpen&&currentUser&&unread>0){
       const now=new Date().toISOString();
-      await supabase.from("membres").update({notifs_vues_at:now}).eq("id",currentUser.id);
+      await supabase.from("membres").update({notifs_vues_at:now}).eq("id",currentUser.membreId||currentUser.id);
       setCurrentUser(u=>({...u,notifs_vues_at:now}));
     }
   };
@@ -1700,7 +1700,7 @@ export default function App() {
     }
     if(data){
       setIsAdmin(data.is_admin||false);
-      setCurrentUser({...data,isMembre:true});
+      setCurrentUser({...data, id:authUser.id, membreId:data.id, isMembre:true});
     } else {
       const meta = authUser.user_metadata||{};
       setIsAdmin(false);
