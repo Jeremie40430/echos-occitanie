@@ -1027,7 +1027,9 @@ function MessagesPrivesTab({currentUser,showToast}) {
 
   useEffect(()=>{
     charger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     supabase.from("profiles").select("id,prenom,nom,email").order("nom").then(({data})=>setProfiles((data||[]).filter(p=>p.id!==currentUser.id)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
   const marquerLu = async(msg) => {
