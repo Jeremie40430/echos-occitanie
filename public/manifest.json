@@ -1,15 +1,30 @@
 {
   "short_name": "Échos",
   "name": "Les Échos d'Occitanie",
-  "start_url": ".",
+  "description": "Application du groupe de trompes Les Échos d'Occitanie",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#1C2B1A",
-  "theme_color": "#1C2B1A",
+  "orientation": "portrait",
+  "background_color": "#1A1F6E",
+  "theme_color": "#1A1F6E",
   "icons": [
     {
       "src": "favicon.ico",
       "sizes": "64x64",
       "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ]
 }
