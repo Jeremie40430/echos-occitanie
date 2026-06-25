@@ -817,6 +817,29 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
       setReponses(r||[]);
       setLoading(false);
     });
+
+    const chanMessages = supabase.channel("rt-messages")
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},(p)=>{
+        setMessages(prev=>[p.new,...prev]);
+      })
+      .on("postgres_changes",{event:"DELETE",schema:"public",table:"messages"},(p)=>{
+        setMessages(prev=>prev.filter(m=>m.id!==p.old.id));
+      })
+      .subscribe();
+
+    const chanReponses = supabase.channel("rt-reponses")
+      .on("postgres_changes",{event:"*",schema:"public",table:"sondage_reponses"},(p)=>{
+        if(p.eventType==="INSERT") setReponses(prev=>[...prev,p.new]);
+        else if(p.eventType==="UPDATE") setReponses(prev=>prev.map(r=>r.id===p.new.id?p.new:r));
+        else if(p.eventType==="DELETE") setReponses(prev=>prev.filter(r=>r.id!==p.old.id));
+      })
+      .subscribe();
+
+    return ()=>{
+      supabase.removeChannel(chanMessages);
+      supabase.removeChannel(chanReponses);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
   const envoyerMessage = async(type="message") => {
@@ -1027,8 +1050,17 @@ function MessagesPrivesTab({currentUser,showToast}) {
 
   useEffect(()=>{
     charger();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     supabase.from("profiles").select("id,prenom,nom,email").order("nom").then(({data})=>setProfiles((data||[]).filter(p=>p.id!==currentUser.id)));
+
+    const chan = supabase.channel("rt-prives-"+currentUser.id)
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages_prives"},(p)=>{
+        if(p.new.from_id===currentUser.id||p.new.to_id===currentUser.id){
+          setMsgs(prev=>[...prev,p.new]);
+        }
+      })
+      .subscribe();
+
+    return ()=>{ supabase.removeChannel(chan); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
@@ -1752,7 +1784,7 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap'); *{box-sizing:border-box} ::-webkit-scrollbar{display:none} :root{--bg:${fondColor};--card:${cardColor};--radius:${cardRadius}px}`}</style>
 
       {/* Header */}
-      <div style={{background:hColor,padding:"14px 16px 0",paddingTop:"max(14px, env(safe-area-inset-top))",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
+      <div style={{background:hColor,padding:"14px 16px 0",position:"sticky",top:0,zIndex:10,boxShadow:"0 2px 16px rgba(26,31,110,0.3)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {apparence.logoUrl
