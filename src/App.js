@@ -800,6 +800,12 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
   const [texteAnnonce,setTexteAnnonce] = useState("");
   const [modal,setModal] = useState(null);
   const [confirm,setConfirm] = useState(null);
+  const [nonLusPrives,setNonLusPrives] = useState(0);
+
+  useEffect(()=>{
+    if(!currentUser) return;
+    supabase.from("messages_prives").select("id",{count:"exact"}).eq("to_id",currentUser.id).eq("lu",false).then(({count})=>setNonLusPrives(count||0));
+  },[currentUser]);
 
   useEffect(()=>{
     Promise.all([
@@ -877,12 +883,17 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
 
   return (
     <>
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         {[["fil","Discussion"],["sondages","Sondages"],["annonces","Annonces"]].map(([id,l])=>(
           <button key={id} onClick={()=>setSubTab(id)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:subTab===id?700:400,background:subTab===id?C.primary:"#E8E0D0",color:subTab===id?"#fff":C.grisChaud}}>
             {l}
           </button>
         ))}
+        {currentUser&&(
+          <button onClick={()=>setSubTab("prives")} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:subTab==="prives"?700:400,background:subTab==="prives"?C.primary:"#E8E0D0",color:subTab==="prives"?"#fff":C.grisChaud,display:"flex",alignItems:"center",gap:5}}>
+            Privés{nonLusPrives>0&&<span style={{background:C.secondary,color:"#fff",borderRadius:10,fontSize:10,padding:"1px 6px",fontWeight:700}}>{nonLusPrives}</span>}
+          </button>
+        )}
       </div>
 
       {subTab==="fil"&&(
@@ -990,9 +1001,153 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
         </>
       )}
 
+      {subTab==="prives"&&currentUser&&<MessagesPrivesTab currentUser={currentUser} showToast={showToast}/>}
+
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
   );
+}
+
+// ── MESSAGES PRIVÉS ────────────────────────────────────────────────
+function MessagesPrivesTab({currentUser,showToast}) {
+  const [msgs,setMsgs]           = useState([]);
+  const [loading,setLoading]     = useState(true);
+  const [vue,setVue]             = useState("inbox"); // "inbox"|"nouveau"|"conv"
+  const [convPartner,setConvPartner] = useState(null);
+  const [profiles,setProfiles]   = useState([]);
+  const [dest,setDest]           = useState("");
+  const [contenu,setContenu]     = useState("");
+  const [sending,setSending]     = useState(false);
+  const [rep,setRep]             = useState("");
+
+  const charger = async() => {
+    const{data}=await supabase.from("messages_prives").select("*").or(`from_id.eq.${currentUser.id},to_id.eq.${currentUser.id}`).order("created_at",{ascending:false});
+    setMsgs(data||[]);
+    setLoading(false);
+  };
+
+  useEffect(()=>{
+    charger();
+    supabase.from("profiles").select("id,prenom,nom,email").order("nom").then(({data})=>setProfiles((data||[]).filter(p=>p.id!==currentUser.id)));
+  },[]);
+
+  const marquerLu = async(msg) => {
+    if(!msg.lu && msg.to_id===currentUser.id){
+      await supabase.from("messages_prives").update({lu:true}).eq("id",msg.id);
+      setMsgs(prev=>prev.map(m=>m.id===msg.id?{...m,lu:true}:m));
+    }
+  };
+
+  const ouvrirConv = (partnerId,partnerNom) => {
+    setConvPartner({id:partnerId,nom:partnerNom});
+    msgs.filter(m=>m.from_id===partnerId&&m.to_id===currentUser.id&&!m.lu).forEach(m=>marquerLu(m));
+    setVue("conv");
+  };
+
+  const envoyer = async() => {
+    if(!contenu.trim()||!dest) return;
+    setSending(true);
+    const destProfile = profiles.find(p=>p.id===dest);
+    const from_nom = `${currentUser.prenom||""} ${currentUser.nom||""}`.trim();
+    const to_nom   = `${destProfile?.prenom||""} ${destProfile?.nom||""}`.trim();
+    const{error}=await supabase.from("messages_prives").insert([{from_id:currentUser.id,from_nom,to_id:dest,to_nom,contenu:contenu.trim()}]);
+    if(error){showToast("Erreur envoi");setSending(false);return;}
+    showToast("Message envoyé ✓");
+    setContenu("");setDest("");
+    await charger();
+    setVue("inbox");
+    setSending(false);
+  };
+
+  const envoyerReponse = async(texte) => {
+    if(!texte.trim()||!convPartner) return;
+    const from_nom = `${currentUser.prenom||""} ${currentUser.nom||""}`.trim();
+    await supabase.from("messages_prives").insert([{from_id:currentUser.id,from_nom,to_id:convPartner.id,to_nom:convPartner.nom,contenu:texte.trim()}]);
+    await charger();
+  };
+
+  if(loading) return <Spinner/>;
+
+  // ── Conversations groupées
+  if(vue==="inbox"){
+    const partenaires = {};
+    msgs.forEach(m=>{
+      const pid = m.from_id===currentUser.id ? m.to_id : m.from_id;
+      const pnom = m.from_id===currentUser.id ? m.to_nom : m.from_nom;
+      if(!partenaires[pid]) partenaires[pid]={id:pid,nom:pnom,last:m,nonLus:0};
+      if(m.created_at > partenaires[pid].last.created_at) partenaires[pid].last=m;
+      if(!m.lu && m.to_id===currentUser.id) partenaires[pid].nonLus++;
+    });
+    const convs = Object.values(partenaires).sort((a,b)=>b.last.created_at.localeCompare(a.last.created_at));
+
+    return (
+      <>
+        <button onClick={()=>setVue("nouveau")} style={{...S.btnP,marginBottom:16}}>✉️ Nouveau message</button>
+        {convs.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucun message privé.</div>}
+        {convs.map(c=>(
+          <div key={c.id} onClick={()=>ouvrirConv(c.id,c.nom)} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:36,height:36,borderRadius:"50%",background:C.primary,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:13,flexShrink:0}}>
+              {c.nom.split(" ").map(n=>n[0]).join("").slice(0,2)||"?"}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontWeight:700,color:C.primary,fontSize:13}}>{c.nom}</span>
+                <span style={{fontSize:10,color:C.grisChaud}}>{timeAgo(c.last.created_at)}</span>
+              </div>
+              <div style={{fontSize:12,color:C.grisChaud,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.last.from_id===currentUser.id?"Vous : ":""}{c.last.contenu}</div>
+            </div>
+            {c.nonLus>0&&<span style={{...S.badge,background:C.secondary,color:"#fff",fontSize:10}}>{c.nonLus}</span>}
+          </div>
+        ))}
+      </>
+    );
+  }
+
+  // ── Nouveau message
+  if(vue==="nouveau"){
+    return (
+      <>
+        <button onClick={()=>setVue("inbox")} style={{...S.btnS,marginBottom:16}}>← Retour</button>
+        <label style={S.label}>Destinataire</label>
+        <select style={S.select} value={dest} onChange={e=>setDest(e.target.value)}>
+          <option value="">Choisir…</option>
+          {profiles.map(p=><option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
+        </select>
+        <label style={S.label}>Message</label>
+        <textarea style={{...S.input,minHeight:100,resize:"vertical"}} value={contenu} onChange={e=>setContenu(e.target.value)} placeholder="Écrivez votre message…"/>
+        <button style={{...S.btnP,opacity:(!dest||!contenu.trim()||sending)?0.5:1}} disabled={!dest||!contenu.trim()||sending} onClick={envoyer}>Envoyer</button>
+      </>
+    );
+  }
+
+  // ── Conversation
+  if(vue==="conv"&&convPartner){
+    const convMsgs = msgs.filter(m=>(m.from_id===currentUser.id&&m.to_id===convPartner.id)||(m.from_id===convPartner.id&&m.to_id===currentUser.id)).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+    return (
+      <>
+        <button onClick={()=>setVue("inbox")} style={{...S.btnS,marginBottom:16}}>← {convPartner.nom}</button>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+          {convMsgs.map(m=>{
+            const moi = m.from_id===currentUser.id;
+            return (
+              <div key={m.id} style={{display:"flex",justifyContent:moi?"flex-end":"flex-start"}}>
+                <div style={{maxWidth:"80%",padding:"9px 12px",borderRadius:12,background:moi?C.primary:C.bleuClair,color:moi?"#fff":C.primary,fontSize:13,lineHeight:1.5}}>
+                  <div style={{whiteSpace:"pre-line"}}>{m.contenu}</div>
+                  <div style={{fontSize:10,opacity:0.6,marginTop:4,textAlign:moi?"right":"left"}}>{fdt(m.created_at)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <textarea style={{...S.input,flex:1,marginBottom:0,minHeight:44,resize:"none"}} value={rep} onChange={e=>setRep(e.target.value)} placeholder="Répondre…" rows={1}/>
+          <button onClick={async()=>{await envoyerReponse(rep);setRep("");}} disabled={!rep.trim()} style={{...S.btnP,width:"auto",padding:"0 16px",opacity:rep.trim()?1:0.5}}>↑</button>
+        </div>
+      </>
+    );
+  }
+
+  return null;
 }
 
 // ── MEMBRES ────────────────────────────────────────────────────────
