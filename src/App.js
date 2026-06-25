@@ -268,7 +268,6 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
     <div>
       {nextRep&&(
         <div style={{background:ap.headerColor||C.primary,borderRadius:16,padding:"20px 18px",marginBottom:16,position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",top:-20,right:-20,opacity:0.07}}><TrompeLogo size={120} color="#fff"/></div>
           <div style={{fontSize:11,color:"#A8B8D8",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Prochaine répétition</div>
           <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:20,fontWeight:700,marginBottom:4,textTransform:"capitalize"}}>{fd(nextRep.date)}</div>
           <div style={{color:"#C8D8F0",fontSize:13}}>🕐 {nextRep.heure}</div>
