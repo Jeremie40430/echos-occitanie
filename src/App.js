@@ -137,7 +137,7 @@ function FileUpload({onUploaded,accept,label}) {
     setProgress(100);
     setTimeout(()=>{setUploading(false);setProgress(0);},500);
     const taille = file.size>1024*1024 ? `${(file.size/1024/1024).toFixed(1)} Mo` : `${Math.round(file.size/1024)} Ko`;
-    onUploaded({url:data.publicUrl, nom:file.name.replace(`.${ext}`,""), taille, ext});
+    onUploaded({url:data.publicUrl, nom:file.name.replace(`.${ext}`,""), taille, ext, type:file.type});
   };
 
   return (
@@ -156,7 +156,7 @@ function FileUpload({onUploaded,accept,label}) {
           </div>
         )}
       </div>
-      <input ref={inputRef} type="file" accept={accept||"*"} style={{display:"none"}} onChange={upload}/>
+      <input ref={inputRef} type="file" style={{display:"none"}} onChange={upload}/>
     </div>
   );
 }
@@ -607,18 +607,16 @@ function FF({init,actifId,sousActifId,showToast,onClose,onSaved}) {
   };
   return (
     <Modal title={f.id?"Modifier fichier":"Nouveau fichier"} onClose={onClose}>
-      <label style={S.label}>Type</label>
-      <select style={S.select} value={f.type} onChange={e=>s("type",e.target.value)}>
-        <option value="audio">Audio (MP3, M4A…)</option>
-        <option value="pdf">PDF / Partition</option>
-        <option value="midi">MIDI</option>
-        <option value="autre">Autre</option>
-      </select>
       {!f.id&&(
         <FileUpload
           label="Choisir un fichier"
-          accept={f.type==="audio"?"audio/*":f.type==="pdf"?"application/pdf":"*"}
-          onUploaded={({url,nom,taille})=>{s("url",url);if(!f.nom)s("nom",nom);s("taille",taille);}}
+          accept="*"
+          onUploaded={({url,nom,taille,type:t})=>{
+            s("url",url);
+            if(!f.nom)s("nom",nom);
+            s("taille",taille);
+            if(t) s("type", t.startsWith("audio")?"audio":t==="application/pdf"?"pdf":"autre");
+          }}
         />
       )}
       {f.url&&<div style={{fontSize:11,color:C.vert,marginBottom:8,background:C.vertClair,padding:"6px 10px",borderRadius:6}}>Fichier prêt</div>}
