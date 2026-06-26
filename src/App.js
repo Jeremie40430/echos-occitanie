@@ -1694,6 +1694,134 @@ function AuthScreen({onClose}) {
   );
 }
 
+// ── WELCOME SCREEN ─────────────────────────────────────────────────
+function WelcomeScreen({apparence, onGuest}) {
+  const [vue, setVue] = useState("accueil"); // "accueil"|"login"|"signup"
+  const [email,setEmail] = useState("");
+  const [password,setPassword] = useState("");
+  const [prenom,setPrenom] = useState("");
+  const [nom,setNom] = useState("");
+  const [newsletter,setNewsletter] = useState(false);
+  const [error,setError] = useState("");
+  const [loading,setLoading] = useState(false);
+
+  const hColor = apparence.headerColor||C.primary;
+  const aColor = apparence.accentColor||C.secondary;
+  const nomGroupe = apparence.nomGroupe||"Les Échos d'Occitanie";
+  const sousTitre = apparence.sousTitre||"Trompe de Chasse";
+
+  const login = async() => {
+    if(!email||!password) return;
+    setLoading(true);setError("");
+    const{error:err}=await supabase.auth.signInWithPassword({email,password});
+    if(err){setError("Email ou mot de passe incorrect.");setLoading(false);}
+  };
+
+  const signup = async() => {
+    if(!prenom||!nom||!email||!password){setError("Tous les champs sont requis");return;}
+    if(password.length<6){setError("Minimum 6 caractères");return;}
+    setLoading(true);setError("");
+    const{data,error:err}=await supabase.auth.signUp({email,password,options:{data:{prenom,nom}}});
+    if(err){setError(err.message);setLoading(false);return;}
+    if(data.user){
+      await supabase.from("profiles").insert([{id:data.user.id,prenom,nom,email,newsletter}]);
+    }
+  };
+
+  const loginGoogle = async() => {
+    setError("");
+    await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin}});
+  };
+
+  const errBox = error&&<div style={{background:C.rougeClair,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.secondary,marginBottom:12}}>{error}</div>;
+
+  if(vue==="login") return (
+    <div style={{minHeight:"100vh",background:hColor,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px",paddingTop:"calc(24px + env(safe-area-inset-top))"}}>
+      <button onClick={()=>{setVue("accueil");setError("");}} style={{position:"absolute",top:"calc(16px + env(safe-area-inset-top))",left:16,background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",borderRadius:20,padding:"6px 14px",color:"#fff",fontSize:13}}>← Retour</button>
+      <div style={{width:"100%",maxWidth:400}}>
+        <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:22,fontWeight:700,marginBottom:6,textAlign:"center"}}>Connexion</div>
+        <div style={{color:"#A8B8D8",fontSize:13,textAlign:"center",marginBottom:28}}>Bienvenue dans votre espace</div>
+        <label style={{...S.label,color:"#A8B8D8"}}>Email</label>
+        <input type="email" placeholder="ton@email.fr" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={{...S.input,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff","::placeholder":{color:"#888"}}}/>
+        <label style={{...S.label,color:"#A8B8D8"}}>Mot de passe</label>
+        <input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()} style={{...S.input,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}}/>
+        {errBox}
+        <button onClick={login} disabled={loading} style={{...S.btnP,background:aColor,marginBottom:10}}>{loading?"Connexion…":"Se connecter"}</button>
+        <button onClick={()=>{setVue("signup");setError("");}} style={{...S.btnS,border:"1px solid rgba(255,255,255,0.25)",color:"#fff",background:"transparent"}}>Créer un compte</button>
+      </div>
+    </div>
+  );
+
+  if(vue==="signup") return (
+    <div style={{minHeight:"100vh",background:hColor,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px",paddingTop:"calc(24px + env(safe-area-inset-top))",overflowY:"auto"}}>
+      <button onClick={()=>{setVue("accueil");setError("");}} style={{position:"absolute",top:"calc(16px + env(safe-area-inset-top))",left:16,background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",borderRadius:20,padding:"6px 14px",color:"#fff",fontSize:13}}>← Retour</button>
+      <div style={{width:"100%",maxWidth:400}}>
+        <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:22,fontWeight:700,marginBottom:6,textAlign:"center"}}>Créer un compte</div>
+        <div style={{color:"#A8B8D8",fontSize:13,textAlign:"center",marginBottom:28}}>Rejoignez la communauté</div>
+        <label style={{...S.label,color:"#A8B8D8"}}>Prénom *</label>
+        <input style={{...S.input,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}} value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Prénom"/>
+        <label style={{...S.label,color:"#A8B8D8"}}>Nom *</label>
+        <input style={{...S.input,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}} value={nom} onChange={e=>setNom(e.target.value)} placeholder="Nom"/>
+        <label style={{...S.label,color:"#A8B8D8"}}>Email *</label>
+        <input type="email" style={{...S.input,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}} value={email} onChange={e=>setEmail(e.target.value)} placeholder="ton@email.fr"/>
+        <label style={{...S.label,color:"#A8B8D8"}}>Mot de passe *</label>
+        <input type="password" style={{...S.input,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Minimum 6 caractères"/>
+        <div style={{display:"flex",alignItems:"center",gap:10,margin:"8px 0 16px"}}>
+          <input type="checkbox" id="nl2" checked={newsletter} onChange={e=>setNewsletter(e.target.checked)} style={{width:16,height:16,cursor:"pointer"}}/>
+          <label htmlFor="nl2" style={{fontSize:12,color:"#A8B8D8",cursor:"pointer"}}>Je souhaite recevoir la newsletter</label>
+        </div>
+        {errBox}
+        <button onClick={signup} disabled={loading} style={{...S.btnP,background:aColor,marginBottom:10}}>{loading?"Création…":"Créer mon compte"}</button>
+        <button onClick={()=>{setVue("login");setError("");}} style={{...S.btnS,border:"1px solid rgba(255,255,255,0.25)",color:"#fff",background:"transparent"}}>J'ai déjà un compte</button>
+      </div>
+    </div>
+  );
+
+  // Écran d'accueil principal
+  return (
+    <div style={{minHeight:"100vh",background:hColor,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",paddingTop:"calc(40px + env(safe-area-inset-top))"}}>
+      {/* Logo + nom */}
+      <div style={{textAlign:"center",marginBottom:48}}>
+        {apparence.logoUrl
+          ? <img src={apparence.logoUrl} alt="logo" style={{width:80,height:80,borderRadius:16,objectFit:"cover",marginBottom:20}}/>
+          : <div style={{width:80,height:80,borderRadius:"50%",background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}><TrompeLogo size={48} color={aColor}/></div>
+        }
+        <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:26,fontWeight:700,lineHeight:1.2,marginBottom:10}}>{nomGroupe}</div>
+        <div style={{color:"#A8B8D8",fontSize:14,letterSpacing:"0.1em",textTransform:"uppercase"}}>{sousTitre}</div>
+      </div>
+
+      {/* Boutons de connexion */}
+      <div style={{width:"100%",maxWidth:360}}>
+        {/* Email */}
+        <button onClick={()=>setVue("login")} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",cursor:"pointer",background:aColor,color:"#fff",fontWeight:700,fontSize:15,fontFamily:"Inter,sans-serif",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          <span style={{fontSize:18}}>✉️</span> Connexion avec e-mail
+        </button>
+
+        {/* Google */}
+        <button onClick={loginGoogle} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",cursor:"pointer",background:"#fff",color:"#333",fontWeight:700,fontSize:15,fontFamily:"Inter,sans-serif",marginBottom:24,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Connexion avec Google
+        </button>
+
+        {/* Séparateur */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+          <div style={{flex:1,height:1,background:"rgba(255,255,255,0.2)"}}/>
+          <span style={{color:"rgba(255,255,255,0.45)",fontSize:12,fontWeight:600,letterSpacing:"0.05em"}}>OU</span>
+          <div style={{flex:1,height:1,background:"rgba(255,255,255,0.2)"}}/>
+        </div>
+
+        {/* Visiteur */}
+        <button onClick={onGuest} style={{width:"100%",padding:"13px",borderRadius:12,border:"1px solid rgba(255,255,255,0.25)",cursor:"pointer",background:"transparent",color:"rgba(255,255,255,0.75)",fontWeight:600,fontSize:14,fontFamily:"Inter,sans-serif",marginBottom:10}}>
+          Continuer en visiteur
+        </button>
+        <div style={{textAlign:"center",color:"rgba(255,255,255,0.4)",fontSize:11,lineHeight:1.5}}>
+          L'accès visiteur est restreint — les messages,<br/>sondages et présences nécessitent un compte.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── APP ────────────────────────────────────────────────────────────
 const IcHome    = ()=><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>;
 const IcCal     = ()=><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
@@ -1717,6 +1845,7 @@ export default function App() {
   const [loginModal,setLoginModal] = useState(false);
   const [adminModal,setAdminModal] = useState(false);
   const [compteModal,setCompteModal] = useState(false);
+  const [guestMode,setGuestMode] = useState(false);
   const [favoris,setFavoris] = useState([]);
   const [allEvents,setAllEvents] = useState([]);
   const [apparence,setApparenceState] = useState({
@@ -1732,7 +1861,7 @@ export default function App() {
     });
     const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{
       setSession(s);
-      if(s) loadUser(s.user);
+      if(s){loadUser(s.user);setGuestMode(false);}
       else{setIsAdmin(false);setCurrentUser(null);}
     });
     return()=>subscription.unsubscribe();
@@ -1786,7 +1915,8 @@ export default function App() {
 
   const showToast = (msg) => {setToast(msg);setTimeout(()=>setToast(null),2200);};
 
-  if(session===undefined) return <div style={{minHeight:"100vh",background:C.parchemin}}/>;
+  if(session===undefined) return <div style={{minHeight:"100vh",background:C.primary}}/>;
+  if(!session && !guestMode) return <WelcomeScreen apparence={apparence} onGuest={()=>setGuestMode(true)}/>;
 
   const hColor = apparence.headerColor||C.primary;
   const aColor = apparence.accentColor||C.secondary;
@@ -1823,8 +1953,8 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <button onClick={()=>setLoginModal(true)} style={{background:aColor,border:"none",cursor:"pointer",padding:"7px 14px",borderRadius:10,color:"#fff",fontSize:11,fontWeight:700}}>
-                Connexion
+              <button onClick={()=>setGuestMode(false)} style={{background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.3)",cursor:"pointer",padding:"6px 12px",borderRadius:10,color:"#fff",fontSize:11,fontWeight:700}}>
+                🔓 Visiteur
               </button>
             )}
           </div>
