@@ -1568,7 +1568,12 @@ function ModalAdmin({onClose,apparence,setApparence,showToast}) {
 // ── NOTIFICATIONS ──────────────────────────────────────────────────
 const NOTIF_ICONS = {fichier:"🎵",dossier:"📁",evenement:"📅",message:"💬",annonce:"📢",info:"🔔"};
 
-function NotifBell({currentUser,setCurrentUser}) {
+const NOTIF_TAB = {
+  message:"messages", annonce:"messages", evenement:"agenda",
+  dossier:"medias", fichier:"medias", info:"accueil",
+};
+
+function NotifBell({currentUser,setCurrentUser,setTab}) {
   const [open,setOpen] = useState(false);
   const [notifs,setNotifs] = useState([]);
 
@@ -1608,15 +1613,21 @@ function NotifBell({currentUser,setCurrentUser}) {
             <div style={{padding:"14px 16px",borderBottom:"1px solid #E8E0D0",fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:15}}>Notifications</div>
             <div style={{overflowY:"auto",flex:1}}>
               {notifs.length===0&&<div style={{padding:"24px",textAlign:"center",color:C.grisChaud,fontSize:13}}>Aucune notification</div>}
-              {notifs.map(n=>(
-                <div key={n.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:"1px solid #F0EAE0"}}>
-                  <div style={{width:36,height:36,borderRadius:10,background:C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{NOTIF_ICONS[n.type]||"🔔"}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,color:C.primary,lineHeight:1.4}}>{n.titre}</div>
-                    <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>{timeAgo(n.created_at)}</div>
+              {notifs.map(n=>{
+                const dest = NOTIF_TAB[n.type];
+                return (
+                  <div key={n.id} onClick={()=>{if(dest){setTab(dest);setOpen(false);}}} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:"1px solid #F0EAE0",cursor:dest?"pointer":"default",background:"transparent",transition:"background 0.15s"}}
+                    onMouseEnter={e=>{if(dest)e.currentTarget.style.background="#F5F0E8";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                    <div style={{width:36,height:36,borderRadius:10,background:C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{NOTIF_ICONS[n.type]||"🔔"}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,color:C.primary,lineHeight:1.4}}>{n.titre}</div>
+                      <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>{timeAgo(n.created_at)}</div>
+                    </div>
+                    {dest&&<div style={{fontSize:12,color:C.grisChaud,alignSelf:"center"}}>→</div>}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -1947,7 +1958,7 @@ export default function App() {
                 {isAdmin&&(
                   <button onClick={()=>setAdminModal(true)} title="Paramètres admin" style={{background:"#ffffff22",border:"none",cursor:"pointer",width:32,height:32,borderRadius:"50%",color:"#fff",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center"}}>⚙️</button>
                 )}
-                <NotifBell currentUser={currentUser} setCurrentUser={setCurrentUser}/>
+                <NotifBell currentUser={currentUser} setCurrentUser={setCurrentUser} setTab={setTab}/>
                 <button onClick={()=>setCompteModal(true)} style={{width:32,height:32,borderRadius:"50%",background:"#ffffff22",border:"2px solid #ffffff44",cursor:"pointer",color:"#fff",fontWeight:700,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {currentUser ? `${currentUser.prenom?.[0]||""}${currentUser.nom?.[0]||""}` : "?"}
                 </button>
