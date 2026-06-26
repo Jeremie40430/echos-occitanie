@@ -265,14 +265,19 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
   const evColors = {concert:"#EDE7F6",concours:C.rougeClair,stage:C.bleuClair,repetition:C.bleuClair};
 
   const [alaune, setAlaune] = useState([]);
+  const [reponses, setReponses] = useState([]);
+  const [expanded, setExpanded] = useState(null);
+
   useEffect(()=>{
     Promise.all([
       supabase.from("messages").select("*").eq("epingle",true).eq("type","annonce").order("created_at",{ascending:false}),
       supabase.from("sondages").select("*").eq("epingle",true).order("created_at",{ascending:false}),
-    ]).then(([{data:ann},{data:son}])=>{
+      supabase.from("sondage_reponses").select("*"),
+    ]).then(([{data:ann},{data:son},{data:rep}])=>{
       const annonces = (ann||[]).map(x=>({...x,_kind:"annonce"}));
       const sondages = (son||[]).map(x=>({...x,_kind:"sondage"}));
       setAlaune([...annonces,...sondages].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)));
+      setReponses(rep||[]);
     });
     const ch = supabase.channel("rt-alaune")
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},(p)=>{
@@ -285,10 +290,31 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
         if(p.new.epingle) setAlaune(prev=>[{...p.new,_kind:"sondage"},...prev.filter(x=>x.id!==p.new.id)]);
         else setAlaune(prev=>prev.filter(x=>x.id!==p.new.id));
       })
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"sondage_reponses"},(p)=>{
+        setReponses(prev=>[...prev,p.new]);
+      })
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"sondage_reponses"},(p)=>{
+        setReponses(prev=>prev.map(r=>r.id===p.new.id?p.new:r));
+      })
       .subscribe();
     return ()=>supabase.removeChannel(ch);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  const repondre = async(sondageId, option) => {
+    if(!currentUser){showToast("Connectez-vous pour voter");return;}
+    const existing = reponses.find(r=>r.sondage_id===sondageId&&r.membre_id===currentUser.id);
+    if(existing){
+      const{error}=await supabase.from("sondage_reponses").update({reponse:option}).eq("id",existing.id);
+      if(error){showToast("Erreur: "+error.message);return;}
+      setReponses(prev=>prev.map(r=>r.id===existing.id?{...r,reponse:option}:r));
+    } else {
+      const{data,error}=await supabase.from("sondage_reponses").insert([{sondage_id:sondageId,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,reponse:option}]).select().single();
+      if(error){showToast("Erreur: "+error.message);return;}
+      if(data) setReponses(prev=>[...prev,data]);
+    }
+    showToast("Réponse enregistrée ✓");
+  };
 
   return (
     <div>
@@ -363,15 +389,46 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
               </div>
               <div style={{fontSize:13,color:C.primary,lineHeight:1.6,whiteSpace:"pre-line",marginTop:6}}>{item.contenu}</div>
             </div>
-          ):(
-            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.bleuMoyen}`,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                <span style={{...S.badge,background:C.bleuClair,color:C.bleuMoyen}}>Sondage</span>
+          ):(()=>{
+            const open = expanded===item.id;
+            const repSondage = reponses.filter(r=>r.sondage_id===item.id);
+            const maReponse = repSondage.find(r=>r.membre_id===currentUser?.id);
+            return (
+              <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.bleuMoyen}`,marginBottom:10,padding:0,overflow:"hidden"}}>
+                <div onClick={()=>setExpanded(open?null:item.id)} style={{padding:"12px 14px",cursor:"pointer"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <span style={{...S.badge,background:C.bleuClair,color:C.bleuMoyen}}>Sondage</span>
+                    <span style={{color:C.grisChaud,fontSize:13,transform:open?"rotate(180deg)":"none",display:"inline-block",transition:"transform 0.2s"}}>▾</span>
+                  </div>
+                  <div style={{fontWeight:700,color:C.primary,fontSize:14}}>{item.question}</div>
+                  {!open&&maReponse&&<div style={{fontSize:11,color:C.bleuMoyen,marginTop:4}}>✓ Votre réponse : {maReponse.reponse}</div>}
+                  {!open&&!maReponse&&<div style={{fontSize:11,color:C.grisChaud,marginTop:4}}>{repSondage.length} réponse(s) · Cliquer pour voter</div>}
+                </div>
+                {open&&(
+                  <div style={{borderTop:"1px solid #E8E0D0",padding:"10px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                    {(item.options||[]).map((opt,i)=>{
+                      const nb = repSondage.filter(r=>r.reponse===opt).length;
+                      const total = repSondage.length||1;
+                      const pct = Math.round((nb/total)*100);
+                      const selected = maReponse?.reponse===opt;
+                      return (
+                        <div key={i}>
+                          <button onClick={()=>repondre(item.id,opt)} style={{width:"100%",padding:"9px 12px",borderRadius:9,border:`2px solid ${selected?C.bleuMoyen:"#D4C9B0"}`,background:selected?C.bleuClair:C.blanc,cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,fontWeight:selected?700:400,color:C.primary}}>
+                            <span>{opt}</span>
+                            <span style={{fontSize:11,color:C.grisChaud}}>{nb} · {pct}%</span>
+                          </button>
+                          <div style={{height:3,background:"#E8E0D0",borderRadius:2,marginTop:3}}>
+                            <div style={{height:"100%",width:`${pct}%`,background:C.bleuMoyen,borderRadius:2,transition:"width 0.4s"}}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div style={{fontSize:10,color:C.grisChaud,textAlign:"right"}}>{repSondage.length} réponse(s)</div>
+                  </div>
+                )}
               </div>
-              <div style={{fontWeight:700,color:C.primary,fontSize:14,marginBottom:4}}>{item.question}</div>
-              <div style={{fontSize:12,color:C.grisChaud}}>{(item.options||[]).join(" · ")}</div>
-            </div>
-          ))}
+            );
+          })())}
         </div>
       )}
 
