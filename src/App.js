@@ -292,54 +292,85 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
 
   return (
     <div>
-      {nextRep&&(
-        <div style={{background:ap.headerColor||C.primary,borderRadius:16,padding:"20px 18px",marginBottom:16,position:"relative",overflow:"hidden"}}>
-          <div style={{fontSize:11,color:"#A8B8D8",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Prochaine répétition</div>
-          <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:20,fontWeight:700,marginBottom:4,textTransform:"capitalize"}}>{fd(nextRep.date)}</div>
-          <div style={{color:"#C8D8F0",fontSize:13}}>🕐 {nextRep.heure}</div>
-          <div style={{color:"#C8D8F0",fontSize:13,marginTop:3}}>📍 {nextRep.lieu}</div>
+      {/* Ligne compacte : répétition + prochain événement côte à côte */}
+      {(nextRep||next3[0])&&(
+        <div style={{display:"grid",gridTemplateColumns:nextRep&&next3[0]?"1fr 1fr":"1fr",gap:10,marginBottom:14}}>
+          {nextRep&&(
+            <div style={{background:ap.headerColor||C.primary,borderRadius:14,padding:"14px 12px",overflow:"hidden"}}>
+              <div style={{fontSize:9,color:"#A8B8D8",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Prochaine répétition</div>
+              <div style={{fontFamily:"'Playfair Display',serif",color:"#fff",fontSize:13,fontWeight:700,marginBottom:4,textTransform:"capitalize",lineHeight:1.3}}>{fd(nextRep.date)}</div>
+              <div style={{color:"#C8D8F0",fontSize:11}}>🕐 {nextRep.heure}</div>
+              <div style={{color:"#C8D8F0",fontSize:11,marginTop:2}}>📍 {nextRep.lieu}</div>
+            </div>
+          )}
+          {next3[0]&&(
+            <div style={{...S.card,margin:0,padding:"14px 12px"}}>
+              <div style={{fontSize:9,color:C.grisChaud,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>
+                {next3[0].type==="concert"?"Prochain concert":next3[0].type==="concours"?"Prochain concours":next3[0].type==="stage"?"Prochain stage":"Prochain événement"}
+              </div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13,lineHeight:1.3,marginBottom:4}}>{next3[0].titre||next3[0].type}</div>
+              <div style={{fontSize:11,color:C.grisChaud,textTransform:"capitalize"}}>{fd(next3[0].date)}</div>
+              <div style={{fontSize:11,color:C.grisChaud}}>📍 {next3[0].lieu}</div>
+            </div>
+          )}
         </div>
       )}
 
       {dernierConcours&&(
-        <div style={{...S.card,marginBottom:16,overflow:"hidden"}}>
-          {/* En-tête */}
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:10,color:C.grisChaud,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Dernier concours</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:16,lineHeight:1.2}}>{dernierConcours.titre||"Concours"}</div>
-            <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
-          </div>
-
-          {/* Résultat principal centré */}
-          {dernierConcours.place_globale&&(
-            <div style={{background:C.rougeClair,borderRadius:14,padding:"18px 12px",textAlign:"center",marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.secondary,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Classement général</div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.secondary,fontSize:32,lineHeight:1}}>{dernierConcours.place_globale}</div>
-              <div style={{fontSize:12,color:C.secondary,marginTop:4,opacity:0.8}}></div>
+        <div style={{background:"#FFFBEA",border:"1px solid #F0E080",borderRadius:14,padding:"14px",marginBottom:14,overflow:"hidden"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+            <div>
+              <div style={{fontSize:9,color:"#8B7A00",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Dernier concours</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:14,lineHeight:1.2}}>{dernierConcours.titre||"Concours"}</div>
+              <div style={{fontSize:10,color:"#8B7A00",marginTop:2}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
             </div>
-          )}
-
-          {/* Radoux + Basse côte à côte */}
+            {dernierConcours.place_globale&&(
+              <div style={{textAlign:"center",background:"#F5E800",borderRadius:10,padding:"8px 12px",minWidth:52}}>
+                <div style={{fontSize:8,fontWeight:700,color:"#4A3B00",textTransform:"uppercase",marginBottom:2}}>Général</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:22,lineHeight:1}}>{dernierConcours.place_globale}</div>
+              </div>
+            )}
+          </div>
           {(dernierConcours.place_radoux||dernierConcours.place_basse)&&(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {dernierConcours.place_radoux&&(
-                <div style={{background:C.bleuClair,borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:C.primary,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Radoux</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:24,lineHeight:1}}>{dernierConcours.place_radoux}</div>
-                  <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}></div>
+                <div style={{background:"#FFF8C0",borderRadius:10,padding:"10px",textAlign:"center"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#6B5C00",textTransform:"uppercase",marginBottom:3}}>Radoux</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:20}}>{dernierConcours.place_radoux}</div>
                 </div>
               )}
               {dernierConcours.place_basse&&(
-                <div style={{background:"#EDE7F6",borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#4527A0",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Basse</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4527A0",fontSize:24,lineHeight:1}}>{dernierConcours.place_basse}</div>
-                  <div style={{fontSize:11,color:"#7B5EA7",marginTop:3}}></div>
+                <div style={{background:"#FFF8C0",borderRadius:10,padding:"10px",textAlign:"center"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#6B5C00",textTransform:"uppercase",marginBottom:3}}>Basse</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:20}}>{dernierConcours.place_basse}</div>
                 </div>
               )}
             </div>
           )}
+          {dernierConcours.note_admin&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #E8D800",fontSize:12,color:"#4A3B00",lineHeight:1.6,fontStyle:"italic"}}>{dernierConcours.note_admin}</div>}
+        </div>
+      )}
 
-          {dernierConcours.note_admin&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #E8E0D0",fontSize:13,color:C.primary,lineHeight:1.7,fontStyle:"italic"}}>{dernierConcours.note_admin}</div>}
+      {alaune.length>0&&(
+        <div style={{marginBottom:16}}>
+          <div style={S.secTitle}>⭐ À la une</div>
+          {alaune.map(item=>item._kind==="annonce"?(
+            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.secondary}`,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                <span style={{...S.badge,background:C.rougeClair,color:C.secondary}}>Annonce</span>
+                <span style={{fontSize:10,color:C.grisChaud}}>{item.auteur_nom} · {fdt(item.created_at)}</span>
+              </div>
+              <div style={{fontSize:13,color:C.primary,lineHeight:1.6,whiteSpace:"pre-line",marginTop:6}}>{item.contenu}</div>
+            </div>
+          ):(
+            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.bleuMoyen}`,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <span style={{...S.badge,background:C.bleuClair,color:C.bleuMoyen}}>Sondage</span>
+              </div>
+              <div style={{fontWeight:700,color:C.primary,fontSize:14,marginBottom:4}}>{item.question}</div>
+              <div style={{fontSize:12,color:C.grisChaud}}>{(item.options||[]).join(" · ")}</div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -378,10 +409,10 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
         </div>
       )}
 
-      {next3.length>0&&(
+      {next3.slice(1).length>0&&(
         <div>
           <div style={S.secTitle}>Prochains événements</div>
-          {next3.map(ev=>(
+          {next3.slice(1).map(ev=>(
             <div key={ev.id} style={{...S.card,display:"flex",alignItems:"center",gap:12}}>
               <div style={{width:40,height:40,borderRadius:10,background:evColors[ev.type]||C.bleuClair,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:20}}>
                 {ev.type==="concert"?"🎵":ev.type==="concours"?"🏆":ev.type==="stage"?"🎓":"📅"}
