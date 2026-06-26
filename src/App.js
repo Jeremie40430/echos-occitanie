@@ -127,10 +127,12 @@ function FileUpload({onUploaded,accept,label}) {
     const file = e.target.files[0];
     if(!file) return;
     setUploading(true); setProgress(10);
-    const ext = file.name.split(".").pop();
+    const ext = file.name.split(".").pop().toLowerCase();
     const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     setProgress(40);
-    const{error} = await supabase.storage.from("media").upload(path, file, {upsert:false});
+    const SAFE_TYPES = ["audio/mpeg","audio/wav","audio/ogg","audio/flac","audio/aac","audio/mp4","application/pdf","image/jpeg","image/png","image/gif","image/webp","video/mp4","video/webm"];
+    const contentType = SAFE_TYPES.includes(file.type) ? file.type : "application/octet-stream";
+    const{error} = await supabase.storage.from("media").upload(path, file, {upsert:false, contentType});
     setProgress(80);
     if(error){alert("Erreur upload : "+error.message);setUploading(false);return;}
     const{data} = supabase.storage.from("media").getPublicUrl(path);
