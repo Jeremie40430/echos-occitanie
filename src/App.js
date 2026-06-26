@@ -254,7 +254,7 @@ const FileCard = ({nom,taille,url,typeLabel,onEdit,onDelete,isAdmin}) => (
 );
 
 // ── ACCUEIL ────────────────────────────────────────────────────────
-function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
+function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin}) {
   const ap = apparence||{};
   const todayStr = new Date().toLocaleDateString("en-CA");
   const upcoming = allEvents.filter(e=>e.date>=todayStr).sort((a,b)=>a.date.localeCompare(b.date));
@@ -263,6 +263,32 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
   const dernierConcours = allEvents.filter(e=>e.type==="concours"&&e.date<todayStr).sort((a,b)=>b.date.localeCompare(a.date))[0];
   const evLabels = {concert:"Concert",concours:"Concours",stage:"Stage",repetition:"Répétition"};
   const evColors = {concert:"#EDE7F6",concours:C.rougeClair,stage:C.bleuClair,repetition:C.bleuClair};
+
+  const [alaune, setAlaune] = useState([]);
+  useEffect(()=>{
+    Promise.all([
+      supabase.from("messages").select("*").eq("epingle",true).eq("type","annonce").order("created_at",{ascending:false}),
+      supabase.from("sondages").select("*").eq("epingle",true).order("created_at",{ascending:false}),
+    ]).then(([{data:ann},{data:son}])=>{
+      const annonces = (ann||[]).map(x=>({...x,_kind:"annonce"}));
+      const sondages = (son||[]).map(x=>({...x,_kind:"sondage"}));
+      setAlaune([...annonces,...sondages].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)));
+    });
+    const ch = supabase.channel("rt-alaune")
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},(p)=>{
+        if(p.new.type==="annonce"){
+          if(p.new.epingle) setAlaune(prev=>[{...p.new,_kind:"annonce"},...prev.filter(x=>x.id!==p.new.id)]);
+          else setAlaune(prev=>prev.filter(x=>x.id!==p.new.id));
+        }
+      })
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"sondages"},(p)=>{
+        if(p.new.epingle) setAlaune(prev=>[{...p.new,_kind:"sondage"},...prev.filter(x=>x.id!==p.new.id)]);
+        else setAlaune(prev=>prev.filter(x=>x.id!==p.new.id));
+      })
+      .subscribe();
+    return ()=>supabase.removeChannel(ch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   return (
     <div>
@@ -314,6 +340,29 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast}) {
           )}
 
           {dernierConcours.note_admin&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #E8E0D0",fontSize:13,color:C.primary,lineHeight:1.7,fontStyle:"italic"}}>{dernierConcours.note_admin}</div>}
+        </div>
+      )}
+
+      {alaune.length>0&&(
+        <div style={{marginBottom:16}}>
+          <div style={S.secTitle}>⭐ À la une</div>
+          {alaune.map(item=>item._kind==="annonce"?(
+            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.secondary}`,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                <span style={{...S.badge,background:C.rougeClair,color:C.secondary}}>Annonce</span>
+                <span style={{fontSize:10,color:C.grisChaud}}>{item.auteur_nom} · {fdt(item.created_at)}</span>
+              </div>
+              <div style={{fontSize:13,color:C.primary,lineHeight:1.6,whiteSpace:"pre-line",marginTop:6}}>{item.contenu}</div>
+            </div>
+          ):(
+            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.bleuMoyen}`,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <span style={{...S.badge,background:C.bleuClair,color:C.bleuMoyen}}>Sondage</span>
+              </div>
+              <div style={{fontWeight:700,color:C.primary,fontSize:14,marginBottom:4}}>{item.question}</div>
+              <div style={{fontSize:12,color:C.grisChaud}}>{(item.options||[]).join(" · ")}</div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -991,7 +1040,10 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
                     );
                   })}
                 </div>
-                <div style={{fontSize:10,color:C.grisChaud,marginTop:10}}>{repSondage.length} réponse(s)</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10}}>
+                  <div style={{fontSize:10,color:C.grisChaud}}>{repSondage.length} réponse(s)</div>
+                  <button onClick={async()=>{const nv=!s.epingle;await supabase.from("sondages").update({epingle:nv}).eq("id",s.id);setSondages(prev=>prev.map(x=>x.id===s.id?{...x,epingle:nv}:x));showToast(nv?"Épinglé sur l'accueil ⭐":"Retiré de l'accueil");}} style={{background:s.epingle?"#FDF3E3":"#F5F5F5",border:"none",cursor:"pointer",padding:"4px 8px",borderRadius:6,fontSize:14}} title={s.epingle?"Retirer de l'accueil":"Épingler sur l'accueil"}>{s.epingle?"⭐":"☆"}</button>
+                </div>
                 {isAdmin&&<button onClick={()=>setConfirm({msg:"Supprimer ce sondage ?",fn:async()=>{await supabase.from("sondages").delete().eq("id",s.id);setSondages(prev=>prev.filter(x=>x.id!==s.id));showToast("Supprimé ✓");setConfirm(null);}})} style={{...S.btnD,marginTop:8,padding:"6px"}}>Supprimer</button>}
               </div>
             );
@@ -1018,7 +1070,10 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
                   <span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginBottom:4}}>Annonce</span>
                   <div style={{fontSize:10,color:C.grisChaud}}>{m.auteur_nom} · {fdt(m.created_at)}</div>
                 </div>
-                {isAdmin&&<button onClick={()=>setConfirm({msg:"Supprimer ?",fn:()=>supprimerMessage(m.id)})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:12}}>🗑</button>}
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={async()=>{const nv=!m.epingle;await supabase.from("messages").update({epingle:nv}).eq("id",m.id);setMessages(prev=>prev.map(x=>x.id===m.id?{...x,epingle:nv}:x));showToast(nv?"Épinglé sur l'accueil ⭐":"Retiré de l'accueil");}} style={{background:m.epingle?"#FDF3E3":"#F5F5F5",border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:14}} title={m.epingle?"Retirer de l'accueil":"Épingler sur l'accueil"}>{m.epingle?"⭐":"☆"}</button>
+                  {isAdmin&&<button onClick={()=>setConfirm({msg:"Supprimer ?",fn:()=>supprimerMessage(m.id)})} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"4px 7px",borderRadius:6,fontSize:12}}>🗑</button>}
+                </div>
               </div>
               <div style={{fontSize:13,color:C.primary,lineHeight:1.6,whiteSpace:"pre-line"}}>{m.contenu}</div>
             </div>
@@ -1988,7 +2043,7 @@ export default function App() {
 
       {/* Contenu — décalé sous le header fixe (~120px) */}
       <div style={{padding:"18px 14px 80px",paddingTop:"calc(120px + env(safe-area-inset-top))"}}>
-        {tab==="accueil"  &&<AccueilTab favoris={favoris} allEvents={allEvents} apparence={apparence} currentUser={currentUser} showToast={showToast}/>}
+        {tab==="accueil"  &&<AccueilTab favoris={favoris} allEvents={allEvents} apparence={apparence} currentUser={currentUser} showToast={showToast} isAdmin={isAdmin}/>}
         {tab==="agenda"   &&<AgendaTab isAdmin={isAdmin} showToast={showToast} allEvents={allEvents} setAllEvents={setAllEvents} currentUser={currentUser} apparence={apparence}/>}
         {tab==="medias"   &&<MediasTab isAdmin={isAdmin} showToast={showToast} favoris={favoris} setFavoris={setFavoris} apparence={apparence} currentUser={currentUser}/>}
         {tab==="messages" &&<MessagesTab isAdmin={isAdmin} showToast={showToast} currentUser={currentUser}/>}
