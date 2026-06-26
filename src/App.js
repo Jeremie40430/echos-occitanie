@@ -374,29 +374,6 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
         </div>
       )}
 
-      {alaune.length>0&&(
-        <div style={{marginBottom:16}}>
-          <div style={S.secTitle}>⭐ À la une</div>
-          {alaune.map(item=>item._kind==="annonce"?(
-            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.secondary}`,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-                <span style={{...S.badge,background:C.rougeClair,color:C.secondary}}>Annonce</span>
-                <span style={{fontSize:10,color:C.grisChaud}}>{item.auteur_nom} · {fdt(item.created_at)}</span>
-              </div>
-              <div style={{fontSize:13,color:C.primary,lineHeight:1.6,whiteSpace:"pre-line",marginTop:6}}>{item.contenu}</div>
-            </div>
-          ):(
-            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.bleuMoyen}`,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                <span style={{...S.badge,background:C.bleuClair,color:C.bleuMoyen}}>Sondage</span>
-              </div>
-              <div style={{fontWeight:700,color:C.primary,fontSize:14,marginBottom:4}}>{item.question}</div>
-              <div style={{fontSize:12,color:C.grisChaud}}>{(item.options||[]).join(" · ")}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {favoris.length>0&&(
         <div style={{marginBottom:16}}>
           <div style={S.secTitle}>Favoris</div>
@@ -1965,6 +1942,11 @@ export default function App() {
   },[]);
 
   const loadUser = async(authUser) => {
+    const meta = authUser.user_metadata||{};
+    // Extraire prénom/nom peu importe la méthode de connexion (email, Google, etc.)
+    const prenomMeta = meta.prenom || meta.given_name || (meta.full_name||meta.name||"").split(" ")[0] || "";
+    const nomMeta    = meta.nom    || meta.family_name || (meta.full_name||meta.name||"").split(" ").slice(1).join(" ") || "";
+
     // Chercher d'abord par ID (nouveaux comptes), puis par email (membres existants)
     let{data}=await supabase.from("membres").select("*").eq("id",authUser.id).maybeSingle();
     if(!data && authUser.email){
@@ -1975,16 +1957,21 @@ export default function App() {
       setIsAdmin(data.is_admin||false);
       setCurrentUser({...data, id:authUser.id, membreId:data.id, isMembre:true});
     } else {
-      const meta = authUser.user_metadata||{};
       setIsAdmin(false);
-      setCurrentUser({id:authUser.id,email:authUser.email,prenom:meta.prenom||"",nom:meta.nom||"",role:"",is_admin:false,isMembre:false});
+      setCurrentUser({id:authUser.id,email:authUser.email,prenom:prenomMeta,nom:nomMeta,role:"",is_admin:false,isMembre:false});
     }
     // Créer le profil si absent, ou vérifier le blocage
-    const{data:prof}=await supabase.from("profiles").select("id,bloque,membre_groupe").eq("id",authUser.id).maybeSingle();
+    const{data:prof}=await supabase.from("profiles").select("id,bloque,membre_groupe,prenom,nom").eq("id",authUser.id).maybeSingle();
     if(!prof){
-      const meta=authUser.user_metadata||{};
-      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||meta.prenom||"",nom:data?.nom||meta.nom||"",email:authUser.email||"",newsletter:false,bloque:false,membre_groupe:false}]);
-    } else if(prof.bloque){
+      await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||prenomMeta,nom:data?.nom||nomMeta,email:authUser.email||"",newsletter:false,bloque:false,membre_groupe:false}]);
+    } else {
+      // Mettre à jour le profil si prenom/nom vides (compte Google sans nom saisi)
+      if((!prof.prenom||!prof.nom)&&(prenomMeta||nomMeta)){
+        await supabase.from("profiles").update({prenom:prof.prenom||prenomMeta,nom:prof.nom||nomMeta}).eq("id",authUser.id);
+        setCurrentUser(u=>u?{...u,prenom:u.prenom||prenomMeta,nom:u.nom||nomMeta}:u);
+      }
+    }
+    if(prof?.bloque){
       await supabase.auth.signOut();
       alert("Votre compte a été bloqué. Contactez l'administrateur.");
       return;
