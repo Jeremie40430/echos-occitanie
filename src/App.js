@@ -318,31 +318,32 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
 
       {dernierConcours&&(
         <div style={{background:"#FFFBEA",border:"1px solid #F0E080",borderRadius:14,padding:"14px",marginBottom:14,overflow:"hidden"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-            <div>
-              <div style={{fontSize:9,color:"#8B7A00",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Dernier concours</div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:14,lineHeight:1.2}}>{dernierConcours.titre||"Concours"}</div>
-              <div style={{fontSize:10,color:"#8B7A00",marginTop:2}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
+          {/* Titre */}
+          <div style={{fontSize:9,color:"#8B7A00",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Dernier concours</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:14,lineHeight:1.2}}>{dernierConcours.titre||"Concours"}</div>
+          <div style={{fontSize:10,color:"#8B7A00",marginTop:2,marginBottom:10}}>{fds(dernierConcours.date)} · {dernierConcours.lieu}</div>
+
+          {/* Place générale en grand centré */}
+          {dernierConcours.place_globale&&(
+            <div style={{background:"#F5E800",borderRadius:12,padding:"12px",textAlign:"center",marginBottom:10}}>
+              <div style={{fontSize:9,fontWeight:700,color:"#4A3B00",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Classement général</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:36,lineHeight:1}}>{dernierConcours.place_globale}</div>
             </div>
-            {dernierConcours.place_globale&&(
-              <div style={{textAlign:"center",background:"#F5E800",borderRadius:10,padding:"8px 12px",minWidth:52}}>
-                <div style={{fontSize:8,fontWeight:700,color:"#4A3B00",textTransform:"uppercase",marginBottom:2}}>Général</div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:22,lineHeight:1}}>{dernierConcours.place_globale}</div>
-              </div>
-            )}
-          </div>
+          )}
+
+          {/* Radoux à gauche, Basse à droite, plus petits */}
           {(dernierConcours.place_radoux||dernierConcours.place_basse)&&(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {dernierConcours.place_radoux&&(
-                <div style={{background:"#FFF8C0",borderRadius:10,padding:"10px",textAlign:"center"}}>
-                  <div style={{fontSize:9,fontWeight:700,color:"#6B5C00",textTransform:"uppercase",marginBottom:3}}>Radoux</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:20}}>{dernierConcours.place_radoux}</div>
+                <div style={{background:"#FFF8C0",borderRadius:10,padding:"8px",textAlign:"center"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#6B5C00",textTransform:"uppercase",marginBottom:2}}>Radoux</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:15}}>{dernierConcours.place_radoux}</div>
                 </div>
               )}
               {dernierConcours.place_basse&&(
-                <div style={{background:"#FFF8C0",borderRadius:10,padding:"10px",textAlign:"center"}}>
-                  <div style={{fontSize:9,fontWeight:700,color:"#6B5C00",textTransform:"uppercase",marginBottom:3}}>Basse</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:20}}>{dernierConcours.place_basse}</div>
+                <div style={{background:"#FFF8C0",borderRadius:10,padding:"8px",textAlign:"center"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:"#6B5C00",textTransform:"uppercase",marginBottom:2}}>Basse</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:"#4A3B00",fontSize:15}}>{dernierConcours.place_basse}</div>
                 </div>
               )}
             </div>
