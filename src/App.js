@@ -1258,6 +1258,7 @@ function MembresTab({showToast}) {
   const [loading,setLoading] = useState(true);
   const [search,setSearch] = useState("");
   const [confirm,setConfirm] = useState(null);
+  const [expanded,setExpanded] = useState(null);
 
   useEffect(()=>{
     supabase.from("profiles").select("*").order("nom").then(({data})=>{setProfiles(data||[]);setLoading(false);});
@@ -1277,26 +1278,27 @@ function MembresTab({showToast}) {
 
   const filtered = profiles.filter(p=>`${p.prenom} ${p.nom} ${p.email}`.toLowerCase().includes(search.toLowerCase()));
 
-  const toggleNewsletter = async(p) => {
-    const nv = !p.newsletter;
-    await supabase.from("profiles").update({newsletter:nv}).eq("id",p.id);
-    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,newsletter:nv}:x));
-    showToast(nv?"Abonné newsletter ✓":"Désabonné newsletter");
+  const toggle = async(p,field,label1,label2) => {
+    const nv = !p[field];
+    await supabase.from("profiles").update({[field]:nv}).eq("id",p.id);
+    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,[field]:nv}:x));
+    showToast(nv?label1:label2);
   };
 
-  const toggleBloque = async(p) => {
-    const nv = !p.bloque;
-    await supabase.from("profiles").update({bloque:nv}).eq("id",p.id);
-    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,bloque:nv}:x));
-    showToast(nv?"Compte bloqué 🚫":"Compte débloqué ✓");
+  const toggleAdmin = async(p) => {
+    const nv = !p.is_admin;
+    await supabase.from("profiles").update({is_admin:nv}).eq("id",p.id);
+    // Sync aussi dans membres si la personne y est
+    await supabase.from("membres").update({is_admin:nv}).eq("email",p.email);
+    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,is_admin:nv}:x));
+    showToast(nv?"Admin accordé 👑":"Admin retiré");
   };
 
-  const toggleMembreGroupe = async(p) => {
-    const nv = !p.membre_groupe;
-    await supabase.from("profiles").update({membre_groupe:nv}).eq("id",p.id);
-    setProfiles(prev=>prev.map(x=>x.id===p.id?{...x,membre_groupe:nv}:x));
-    showToast(nv?"Accès groupe accordé ✓":"Accès groupe retiré");
-  };
+  const supprimer = (p) => setConfirm({msg:`Supprimer ${p.prenom} ${p.nom} ?`,fn:async()=>{
+    await supabase.from("profiles").delete().eq("id",p.id);
+    setProfiles(prev=>prev.filter(x=>x.id!==p.id));
+    showToast("Supprimé ✓");setConfirm(null);setExpanded(null);
+  }});
 
   if(loading) return <Spinner/>;
 
@@ -1304,23 +1306,48 @@ function MembresTab({showToast}) {
     <>
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…" style={{...S.input,marginBottom:16}}/>
       <div style={S.secTitle}>Inscrits ({filtered.length})</div>
-      {filtered.map(p=>(
-        <div key={p.id} style={{...S.card,display:"flex",alignItems:"center",gap:8,opacity:p.bloque?0.6:1}}>
-          <Avatar nom={p.nom} prenom={p.prenom} size={38}/>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,color:C.primary,fontSize:13}}>
-              {p.prenom} {p.nom}
-              {p.membre_groupe&&<span style={{...S.badge,background:C.bleuClair,color:C.primary,marginLeft:6,fontSize:9}}>Groupe</span>}
-              {p.bloque&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,marginLeft:4,fontSize:9}}>Bloqué</span>}
+      {filtered.map(p=>{
+        const open = expanded===p.id;
+        return (
+          <div key={p.id} style={{...S.card,padding:0,overflow:"hidden",marginBottom:10,opacity:p.bloque?0.7:1}}>
+            {/* En-tête cliquable */}
+            <div onClick={()=>setExpanded(open?null:p.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer"}}>
+              <Avatar nom={p.nom} prenom={p.prenom} size={36}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,color:C.primary,fontSize:13,display:"flex",alignItems:"center",flexWrap:"wrap",gap:4}}>
+                  {p.prenom} {p.nom}
+                  {p.is_admin&&<span style={{...S.badge,background:"#FFF3CD",color:"#856404",fontSize:9}}>👑 Admin</span>}
+                  {p.membre_groupe&&<span style={{...S.badge,background:C.bleuClair,color:C.primary,fontSize:9}}>Groupe</span>}
+                  {p.bloque&&<span style={{...S.badge,background:C.rougeClair,color:C.secondary,fontSize:9}}>Bloqué</span>}
+                  {p.newsletter&&<span style={{...S.badge,background:"#E8F5E9",color:C.vert,fontSize:9}}>Newsletter</span>}
+                </div>
+                <div style={{fontSize:11,color:C.grisChaud,marginTop:1}}>{p.email}</div>
+              </div>
+              <span style={{color:C.grisChaud,fontSize:14,transition:"transform 0.2s",display:"inline-block",transform:open?"rotate(180deg)":"none"}}>▾</span>
             </div>
-            <div style={{fontSize:11,color:C.grisChaud,marginTop:1}}>{p.email}</div>
+            {/* Options dépliées */}
+            {open&&(
+              <div style={{borderTop:"1px solid #E8E0D0",padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <button onClick={()=>toggleAdmin(p)} style={{padding:"9px 6px",borderRadius:9,border:"none",cursor:"pointer",background:p.is_admin?"#FFF3CD":"#F5F5F5",color:p.is_admin?"#856404":C.grisChaud,fontWeight:600,fontSize:12,fontFamily:"Inter,sans-serif"}}>
+                  {p.is_admin?"👑 Retirer admin":"👑 Rendre admin"}
+                </button>
+                <button onClick={()=>toggle(p,"membre_groupe","Accès groupe accordé ✓","Accès groupe retiré")} style={{padding:"9px 6px",borderRadius:9,border:"none",cursor:"pointer",background:p.membre_groupe?C.bleuClair:"#F5F5F5",color:p.membre_groupe?C.primary:C.grisChaud,fontWeight:600,fontSize:12,fontFamily:"Inter,sans-serif"}}>
+                  {p.membre_groupe?"🎺 Retirer groupe":"🎺 Accès groupe"}
+                </button>
+                <button onClick={()=>toggle(p,"newsletter","Abonné newsletter ✓","Désabonné newsletter")} style={{padding:"9px 6px",borderRadius:9,border:"none",cursor:"pointer",background:p.newsletter?"#E8F5E9":"#F5F5F5",color:p.newsletter?C.vert:C.grisChaud,fontWeight:600,fontSize:12,fontFamily:"Inter,sans-serif"}}>
+                  {p.newsletter?"📧 Retirer newsletter":"📧 Newsletter"}
+                </button>
+                <button onClick={()=>toggle(p,"bloque",`Compte bloqué 🚫`,"Compte débloqué ✓")} style={{padding:"9px 6px",borderRadius:9,border:"none",cursor:"pointer",background:p.bloque?"#F5F5F5":C.rougeClair,color:p.bloque?C.vert:C.secondary,fontWeight:600,fontSize:12,fontFamily:"Inter,sans-serif"}}>
+                  {p.bloque?"🔓 Débloquer":"🚫 Bloquer"}
+                </button>
+                <button onClick={()=>supprimer(p)} style={{padding:"9px 6px",borderRadius:9,border:"none",cursor:"pointer",background:C.rougeClair,color:C.secondary,fontWeight:600,fontSize:12,fontFamily:"Inter,sans-serif",gridColumn:"1/-1"}}>
+                  🗑 Supprimer ce compte
+                </button>
+              </div>
+            )}
           </div>
-          <button onClick={()=>toggleMembreGroupe(p)} title={p.membre_groupe?"Retirer du groupe":"Accès groupe"} style={{background:p.membre_groupe?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:13,color:p.membre_groupe?"#fff":C.grisChaud}}>🎺</button>
-          <button onClick={()=>toggleNewsletter(p)} title="Newsletter" style={{background:p.newsletter?C.primary:"#E8E0D0",border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:13,color:p.newsletter?"#fff":C.grisChaud}}>📧</button>
-          <button onClick={()=>toggleBloque(p)} title={p.bloque?"Débloquer":"Bloquer"} style={{background:p.bloque?"#E8E0D0":C.rougeClair,border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:14}}>{p.bloque?"🔓":"🚫"}</button>
-          <button onClick={()=>setConfirm({msg:`Supprimer ${p.prenom} ${p.nom} ?`,fn:async()=>{await supabase.from("profiles").delete().eq("id",p.id);setProfiles(prev=>prev.filter(x=>x.id!==p.id));showToast("Supprimé ✓");setConfirm(null);}})} style={{background:C.rougeClair,border:"none",borderRadius:8,padding:"4px 7px",cursor:"pointer",fontSize:14}}>🗑</button>
-        </div>
-      ))}
+        );
+      })}
       {filtered.length===0&&<div style={{textAlign:"center",color:C.grisChaud,fontSize:13,marginTop:24}}>Aucun inscrit pour l'instant</div>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
@@ -1962,7 +1989,7 @@ export default function App() {
       setCurrentUser({id:authUser.id,email:authUser.email,prenom:prenomMeta,nom:nomMeta,role:"",is_admin:false,isMembre:false});
     }
     // Créer le profil si absent, ou vérifier le blocage
-    const{data:prof}=await supabase.from("profiles").select("id,bloque,membre_groupe,prenom,nom").eq("id",authUser.id).maybeSingle();
+    const{data:prof}=await supabase.from("profiles").select("id,bloque,membre_groupe,prenom,nom,is_admin").eq("id",authUser.id).maybeSingle();
     if(!prof){
       await supabase.from("profiles").insert([{id:authUser.id,prenom:data?.prenom||prenomMeta,nom:data?.nom||nomMeta,email:authUser.email||"",newsletter:false,bloque:false,membre_groupe:false}]);
     } else {
@@ -1976,9 +2003,9 @@ export default function App() {
       await supabase.auth.signOut();
       alert("Votre compte a été bloqué. Contactez l'administrateur.");
       return;
-    } else if(prof.membre_groupe && !data){
-      // Compte simple mais marqué comme membre du groupe
-      setCurrentUser(u=>u?{...u,isMembre:true}:u);
+    } else {
+      if(prof?.is_admin) setIsAdmin(true);
+      if(prof?.membre_groupe && !data) setCurrentUser(u=>u?{...u,isMembre:true}:u);
     }
   };
 
