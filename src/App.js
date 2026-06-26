@@ -745,12 +745,70 @@ function FF({init,actifId,sousActifId,showToast,onClose,onSaved}) {
   );
 }
 
+// ── NOTE FORM ──────────────────────────────────────────────────────
+function NoteForm({init,dossierId,sousDossierId,showToast,onClose,onSaved,currentUser}) {
+  const [titre,setTitre] = useState(init?.titre||"");
+  const [contenu,setContenu] = useState(init?.contenu||"");
+  const [saving,setSaving] = useState(false);
+  const save = async()=>{
+    if(!titre.trim()){showToast("Titre requis");return;}
+    setSaving(true);
+    if(init?.id){
+      const{error}=await supabase.from("notes").update({titre:titre.trim(),contenu}).eq("id",init.id);
+      if(error){showToast("Erreur: "+error.message);}else{showToast("Note mise à jour ✓");onSaved();onClose();}
+    } else {
+      const payload={titre:titre.trim(),contenu,dossier_id:dossierId||null,sous_dossier_id:sousDossierId||null,auteur_id:currentUser?.id||null};
+      const{error}=await supabase.from("notes").insert([payload]);
+      if(error){showToast("Erreur: "+error.message);}else{showToast("Note ajoutée ✓");onSaved();onClose();}
+    }
+    setSaving(false);
+  };
+  return (
+    <Modal title={init?.id?"Modifier la note":"Nouvelle note"} onClose={onClose}>
+      <label style={S.label}>Titre *</label>
+      <input style={S.input} value={titre} onChange={e=>setTitre(e.target.value)} placeholder="Titre de la note"/>
+      <label style={S.label}>Contenu</label>
+      <textarea style={{...S.input,minHeight:140,resize:"vertical",fontFamily:"inherit"}} value={contenu} onChange={e=>setContenu(e.target.value)} placeholder="Rédigez votre note, compte rendu..."/>
+      <button style={{...S.btnP,opacity:(!titre.trim()||saving)?0.5:1}} disabled={!titre.trim()||saving} onClick={save}>{saving?"Enregistrement...":init?.id?"Enregistrer":"Ajouter"}</button>
+      <button style={S.btnS} onClick={onClose}>Annuler</button>
+    </Modal>
+  );
+}
+
+// ── NOTE CARD ──────────────────────────────────────────────────────
+function NoteCard({note,isAdmin,onEdit,onDelete,onFavori}) {
+  const [open,setOpen] = useState(false);
+  return (
+    <div style={{...S.card,marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setOpen(o=>!o)}>
+        <div style={{width:36,height:36,borderRadius:9,background:"#FFFBEA",border:"1px solid #FDE68A",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📝</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{note.titre}</div>
+          <div style={{fontSize:11,color:C.grisChaud,marginTop:1}}>{note.created_at?new Date(note.created_at).toLocaleDateString("fr-FR"):""}</div>
+        </div>
+        <button onClick={e=>{e.stopPropagation();onFavori();}} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:note.favori?"#F59E0B":"#CCC",padding:4}}>{note.favori?"★":"☆"}</button>
+        <span style={{fontSize:12,color:C.grisChaud}}>{open?"▲":"▼"}</span>
+      </div>
+      {open&&(
+        <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.bord}`}}>
+          <div style={{fontSize:13,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{note.contenu||<em style={{color:C.grisChaud}}>Aucun contenu.</em>}</div>
+          {isAdmin&&<div style={{display:"flex",gap:8,marginTop:12}}>
+            <button onClick={onEdit} style={{background:C.bleuClair,border:"none",cursor:"pointer",padding:"5px 12px",borderRadius:6,fontSize:12}}>✏️ Modifier</button>
+            <button onClick={onDelete} style={{background:C.rougeClair,border:"none",cursor:"pointer",padding:"5px 12px",borderRadius:6,fontSize:12}}>🗑 Supprimer</button>
+          </div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MEDIAS ─────────────────────────────────────────────────────────
 function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser}) {
   const ap = apparence||{};
   const [dossiers,setDossiers] = useState([]);
   const [sousDossiers,setSousDossiers] = useState([]);
   const [fichiers,setFichiers] = useState([]);
+  const [notes,setNotes] = useState([]);
   const [loading,setLoading] = useState(true);
   const [actif,setActif] = useState(null); // dossier principal
   const [sousActif,setSousActif] = useState(null); // sous-dossier
@@ -760,17 +818,19 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
 
   const load = useCallback(async()=>{
     setLoading(true);
-    const [{data:d},{data:sd},{data:f}] = await Promise.all([
+    const [{data:d},{data:sd},{data:f},{data:n}] = await Promise.all([
       supabase.from("dossiers").select("*").order("ordre"),
       supabase.from("sous_dossiers").select("*").order("created_at",{ascending:false}),
       supabase.from("fichiers").select("*"),
+      supabase.from("notes").select("*").order("created_at",{ascending:false}),
     ]);
     const isMembre = currentUser?.isMembre||currentUser?.is_admin||currentUser?.membre_groupe;
     setDossiers((d||[]).filter(x=>!x.prive||isMembre));
     setSousDossiers(sd||[]);
     const mapped=(f||[]).map(x=>({...x,dossier_id:x.morceau_id}));
     setFichiers(mapped);
-    setFavoris(mapped.filter(x=>x.favori));
+    setNotes(n||[]);
+    setFavoris([...mapped.filter(x=>x.favori),...(n||[]).filter(x=>x.favori).map(x=>({...x,_type:"note"}))]);
     setLoading(false);
   },[setFavoris,currentUser]);
 
@@ -782,6 +842,15 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
     setFichiers(fs=>fs.map(x=>x.id===f.id?{...x,favori:nv}:x));
     if(nv) setFavoris(prev=>[...prev,{...f,favori:true}]);
     else setFavoris(prev=>prev.filter(x=>x.id!==f.id));
+    showToast(nv?"Ajouté aux favoris":"Retiré des favoris");
+  };
+
+  const toggleFavNote = async(n)=>{
+    const nv=!n.favori;
+    await supabase.from("notes").update({favori:nv}).eq("id",n.id);
+    setNotes(ns=>ns.map(x=>x.id===n.id?{...x,favori:nv}:x));
+    if(nv) setFavoris(prev=>[...prev,{...n,favori:true,_type:"note"}]);
+    else setFavoris(prev=>prev.filter(x=>x.id!==n.id));
     showToast(nv?"Ajouté aux favoris":"Retiré des favoris");
   };
 
@@ -812,18 +881,39 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
     );
   };
 
+  const renderNote = (n) => (
+    <NoteCard key={n.id} note={n} isAdmin={isAdmin}
+      onFavori={()=>toggleFavNote(n)}
+      onEdit={()=>setModal({t:"note",data:{...n}})}
+      onDelete={()=>setConfirm({msg:`Supprimer "${n.titre}" ?`,fn:async()=>{await supabase.from("notes").delete().eq("id",n.id);showToast("Supprimé ✓");setConfirm(null);await load();}})}
+    />
+  );
+
   if(loading) return <Spinner/>;
 
   // Niveau 3 : contenu d'un sous-dossier
   if(sousActif) {
     const contenu = fichiers.filter(f=>f.sous_dossier_id===sousActif.id);
+    const notesSD = notes.filter(n=>n.sous_dossier_id===sousActif.id);
     return (
       <>
         <Breadcrumb items={[actif?.nom, `› ${sousActif.nom}`]} onBack={()=>{setSousActif(null);setModal(null);setPlaying(null);}}/>
-        {contenu.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Aucun fichier — bouton + pour ajouter.</div>}
+        {contenu.length===0&&notesSD.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Dossier vide — bouton + pour ajouter.</div>}
+        {notesSD.map(n=>renderNote(n))}
         {contenu.map(f=>renderFichier(f))}
-        {isAdmin&&<BtnPlus onClick={()=>setModal({t:"fichier"})}/>}
+        {isAdmin&&<BtnPlus onClick={()=>setModal({t:"choix3"})}/>}
+        {modal?.t==="choix3"&&(
+          <Modal title="Ajouter..." onClose={()=>setModal(null)}>
+            {[["fichier","📎 Fichier"],["note","📝 Note / Compte rendu"]].map(([id,t])=>(
+              <div key={id} onClick={()=>setModal({t:id})} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{t}</div>
+              </div>
+            ))}
+            <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
+          </Modal>
+        )}
         {modal?.t==="fichier"&&<FF init={modal.data||null} actifId={actif?.id||null} sousActifId={sousActif?.id||null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
+        {modal?.t==="note"&&<NoteForm init={modal.data||null} dossierId={actif?.id||null} sousDossierId={sousActif?.id||null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load} currentUser={currentUser}/>}
         {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
       </>
     );
@@ -833,6 +923,7 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
   if(actif) {
     const sdList = sousDossiers.filter(sd=>sd.dossier_id===actif.id);
     const fichiersDirects = fichiers.filter(f=>f.morceau_id===actif.id&&!f.sous_dossier_id);
+    const notesDossier = notes.filter(n=>n.dossier_id===actif.id&&!n.sous_dossier_id);
     return (
       <>
         <Breadcrumb items={[actif.nom]} onBack={()=>{setActif(null);setModal(null);setPlaying(null);}}/>
@@ -856,14 +947,15 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
           </div>
         )}
 
-        {/* Fichiers directs */}
-        {fichiersDirects.length===0&&sdList.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Dossier vide — bouton + pour ajouter.</div>}
+        {/* Notes directes + Fichiers directs */}
+        {fichiersDirects.length===0&&sdList.length===0&&notesDossier.length===0&&<div style={{color:C.grisChaud,fontSize:13}}>Dossier vide — bouton + pour ajouter.</div>}
+        {notesDossier.map(n=>renderNote(n))}
         {fichiersDirects.map(f=>renderFichier(f))}
 
         {isAdmin&&<BtnPlus onClick={()=>setModal({t:"choix"})}/>}
         {modal?.t==="choix"&&(
           <Modal title="Ajouter..." onClose={()=>setModal(null)}>
-            {[["sd","Sous-dossier"],["fichier","Fichier"]].map(([id,t])=>(
+            {[["sd","📁 Sous-dossier"],["fichier","📎 Fichier"],["note","📝 Note / Compte rendu"]].map(([id,t])=>(
               <div key={id} onClick={()=>setModal({t:id})} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
                 <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{t}</div>
               </div>
@@ -873,12 +965,14 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
         )}
         {modal?.t==="sd"&&<SDF init={modal.data||null} dossierId={actif.id} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
         {modal?.t==="fichier"&&<FF init={modal.data||null} actifId={actif?.id||null} sousActifId={null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
+        {modal?.t==="note"&&<NoteForm init={modal.data||null} dossierId={actif?.id||null} sousDossierId={null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load} currentUser={currentUser}/>}
         {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
       </>
     );
   }
 
-  // Niveau 1 : liste des dossiers
+  // Niveau 1 : liste des dossiers + notes racine
+  const notesRacine = notes.filter(n=>!n.dossier_id&&!n.sous_dossier_id);
   return (
     <>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -896,8 +990,21 @@ function MediasTab({isAdmin,showToast,favoris,setFavoris,apparence,currentUser})
         ))}
       </div>
 
-      {isAdmin&&<BtnPlus onClick={()=>setModal({t:"dossier"})}/>}
+      {notesRacine.length>0&&<div style={{marginTop:16}}>{notesRacine.map(n=>renderNote(n))}</div>}
+
+      {isAdmin&&<BtnPlus onClick={()=>setModal({t:"choix1"})}/>}
+      {modal?.t==="choix1"&&(
+        <Modal title="Ajouter..." onClose={()=>setModal(null)}>
+          {[["dossier","📂 Dossier"],["note","📝 Note / Compte rendu"]].map(([id,t])=>(
+            <div key={id} onClick={()=>setModal({t:id})} style={{...S.card,cursor:"pointer",display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+              <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{t}</div>
+            </div>
+          ))}
+          <button style={S.btnS} onClick={()=>setModal(null)}>Annuler</button>
+        </Modal>
+      )}
       {modal?.t==="dossier"&&<DF init={modal.data||null} dossiers={dossiers} showToast={showToast} onClose={()=>setModal(null)} onSaved={load}/>}
+      {modal?.t==="note"&&<NoteForm init={modal.data||null} dossierId={null} sousDossierId={null} showToast={showToast} onClose={()=>setModal(null)} onSaved={load} currentUser={currentUser}/>}
       {confirm&&<Confirm msg={confirm.msg} onConfirm={confirm.fn} onClose={()=>setConfirm(null)}/>}
     </>
   );
