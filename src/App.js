@@ -374,29 +374,6 @@ function AccueilTab({favoris,allEvents,apparence,currentUser,showToast,isAdmin})
         </div>
       )}
 
-      {alaune.length>0&&(
-        <div style={{marginBottom:16}}>
-          <div style={S.secTitle}>⭐ À la une</div>
-          {alaune.map(item=>item._kind==="annonce"?(
-            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.secondary}`,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-                <span style={{...S.badge,background:C.rougeClair,color:C.secondary}}>Annonce</span>
-                <span style={{fontSize:10,color:C.grisChaud}}>{item.auteur_nom} · {fdt(item.created_at)}</span>
-              </div>
-              <div style={{fontSize:13,color:C.primary,lineHeight:1.6,whiteSpace:"pre-line",marginTop:6}}>{item.contenu}</div>
-            </div>
-          ):(
-            <div key={item.id} style={{...S.card,borderLeft:`4px solid ${C.bleuMoyen}`,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                <span style={{...S.badge,background:C.bleuClair,color:C.bleuMoyen}}>Sondage</span>
-              </div>
-              <div style={{fontWeight:700,color:C.primary,fontSize:14,marginBottom:4}}>{item.question}</div>
-              <div style={{fontSize:12,color:C.grisChaud}}>{(item.options||[]).join(" · ")}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {favoris.length>0&&(
         <div style={{marginBottom:16}}>
           <div style={S.secTitle}>Favoris</div>
