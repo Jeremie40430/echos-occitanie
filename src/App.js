@@ -364,10 +364,12 @@ function PresenceBtns({ev,presences,setPresences,currentUser,showToast}) {
     if(!currentUser) return;
     const existing = presences.find(x=>x.evenement_id===ev.id&&x.membre_id===currentUser.id);
     if(existing){
-      await supabase.from("presences").update({statut}).eq("id",existing.id);
+      const{error}=await supabase.from("presences").update({statut}).eq("id",existing.id);
+      if(error){showToast("Erreur: "+error.message);return;}
       setPresences(prev=>prev.map(x=>x.id===existing.id?{...x,statut}:x));
     } else {
-      const{data}=await supabase.from("presences").insert([{evenement_id:ev.id,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,statut}]).select().single();
+      const{data,error}=await supabase.from("presences").insert([{evenement_id:ev.id,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,statut}]).select().single();
+      if(error){showToast("Erreur: "+error.message);return;}
       if(data) setPresences(prev=>[...prev,data]);
     }
     showToast("Présence enregistrée ✓");
@@ -844,7 +846,8 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
     const texte = type==="annonce" ? texteAnnonce : texteDiscussion;
     if(!texte.trim()||!currentUser) return;
     const payload={contenu:texte,auteur_id:currentUser.id,auteur_nom:`${currentUser.prenom} ${currentUser.nom}`,type};
-    const{data}=await supabase.from("messages").insert([payload]).select().single();
+    const{data,error}=await supabase.from("messages").insert([payload]).select().single();
+    if(error){showToast("Erreur: "+error.message);return;}
     if(data) setMessages(prev=>[data,...prev]);
     if(type==="annonce") setTexteAnnonce(""); else setTexteDiscussion("");
     await creerNotif(type==="annonce"?`📢 Nouvelle annonce publiée`:`💬 Nouveau message dans la discussion`,type==="annonce"?"annonce":"message");
@@ -862,10 +865,12 @@ function MessagesTab({isAdmin,showToast,currentUser}) {
     if(!currentUser) return;
     const existing = reponses.find(r=>r.sondage_id===sondageId&&r.membre_id===currentUser.id);
     if(existing) {
-      await supabase.from("sondage_reponses").update({reponse:option}).eq("id",existing.id);
+      const{error}=await supabase.from("sondage_reponses").update({reponse:option}).eq("id",existing.id);
+      if(error){showToast("Erreur: "+error.message);return;}
       setReponses(prev=>prev.map(r=>r.id===existing.id?{...r,reponse:option}:r));
     } else {
-      const{data}=await supabase.from("sondage_reponses").insert([{sondage_id:sondageId,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,reponse:option}]).select().single();
+      const{data,error}=await supabase.from("sondage_reponses").insert([{sondage_id:sondageId,membre_id:currentUser.id,membre_nom:`${currentUser.prenom} ${currentUser.nom}`,reponse:option}]).select().single();
+      if(error){showToast("Erreur: "+error.message);return;}
       if(data) setReponses(prev=>[...prev,data]);
     }
     showToast("Réponse enregistrée ✓");
