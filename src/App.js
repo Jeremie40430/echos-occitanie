@@ -1192,6 +1192,18 @@ function MembresTab({showToast}) {
 
   useEffect(()=>{
     supabase.from("profiles").select("*").order("nom").then(({data})=>{setProfiles(data||[]);setLoading(false);});
+    const chan = supabase.channel("rt-profiles")
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"profiles"},(p)=>{
+        setProfiles(prev=>[...prev,p.new].sort((a,b)=>(a.nom||"").localeCompare(b.nom||"")));
+      })
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"profiles"},(p)=>{
+        setProfiles(prev=>prev.map(x=>x.id===p.new.id?p.new:x));
+      })
+      .on("postgres_changes",{event:"DELETE",schema:"public",table:"profiles"},(p)=>{
+        setProfiles(prev=>prev.filter(x=>x.id!==p.old.id));
+      })
+      .subscribe();
+    return ()=>supabase.removeChannel(chan);
   },[]);
 
   const filtered = profiles.filter(p=>`${p.prenom} ${p.nom} ${p.email}`.toLowerCase().includes(search.toLowerCase()));
