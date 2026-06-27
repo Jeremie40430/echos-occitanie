@@ -90,6 +90,35 @@ const Confirm = ({msg,onConfirm,onClose}) => (
   </Modal>
 );
 
+function ConfirmEvenement({ev,onConfirm,onClose}) {
+  const [saisie,setSaisie] = useState("");
+  const nom = ev.titre||ev.type||"";
+  const ok = saisie.trim().toLowerCase()===nom.toLowerCase();
+  return (
+    <Modal title="⚠️ Confirmer la suppression" onClose={onClose}>
+      <div style={{background:"#FFF3CD",border:"1px solid #FDE68A",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+        <div style={{fontSize:13,color:"#92400E",fontWeight:600,marginBottom:4}}>Attention — cette action est irréversible</div>
+        <div style={{fontSize:12,color:"#92400E"}}>Toutes les inscriptions liées à cet événement seront perdues.</div>
+      </div>
+      <div style={{fontSize:13,color:C.primary,marginBottom:8}}>
+        Pour confirmer, tapez le nom de l'événement :<br/>
+        <strong style={{color:C.secondary}}>"{nom}"</strong>
+      </div>
+      <input
+        style={{...S.input,borderColor:saisie&&!ok?"#EF4444":saisie&&ok?"#22C55E":"#D4C9B0"}}
+        value={saisie}
+        onChange={e=>setSaisie(e.target.value)}
+        placeholder={nom}
+        autoFocus
+      />
+      <button style={{...S.btnD,opacity:ok?1:0.4,cursor:ok?"pointer":"not-allowed"}} disabled={!ok} onClick={onConfirm}>
+        Supprimer définitivement
+      </button>
+      <button style={S.btnS} onClick={onClose}>Annuler</button>
+    </Modal>
+  );
+}
+
 const Toast = ({msg}) => (
   <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:C.primary,color:"#fff",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:600,zIndex:200,whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}>{msg}</div>
 );
@@ -638,7 +667,7 @@ function AgendaTab({isAdmin,showToast,allEvents,setAllEvents,currentUser,apparen
 
       {isAdmin&&<BtnPlus onClick={()=>setModal("new")}/>}
       {modal&&<EF init={modal==="new"?null:modal}/>}
-      {confirm&&<Confirm msg="Supprimer cet événement ?" onConfirm={async()=>{await supabase.from("evenements").delete().eq("id",confirm.id);setAllEvents(prev=>prev.filter(e=>e.id!==confirm.id));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
+      {confirm&&<ConfirmEvenement ev={confirm} onConfirm={async()=>{await supabase.from("evenements").delete().eq("id",confirm.id);setAllEvents(prev=>prev.filter(e=>e.id!==confirm.id));showToast("Supprimé ✓");setConfirm(null);}} onClose={()=>setConfirm(null)}/>}
     </>
   );
 }
