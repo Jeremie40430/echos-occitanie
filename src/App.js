@@ -1833,6 +1833,19 @@ const NOTIF_TAB = {
 function NotifBell({currentUser,setCurrentUser,setTab}) {
   const [open,setOpen] = useState(false);
   const [notifs,setNotifs] = useState([]);
+  const [dismissed,setDismissed] = useState(()=>{
+    try{return new Set(JSON.parse(localStorage.getItem("notifs_dismissed_"+(currentUser?.id||"guest"))||"[]"));}catch{return new Set();}
+  });
+
+  const dismissKey = "notifs_dismissed_"+(currentUser?.id||"guest");
+
+  const dismiss = (e,id) => {
+    e.stopPropagation();
+    const next = new Set(dismissed);
+    next.add(id);
+    setDismissed(next);
+    try{localStorage.setItem(dismissKey,JSON.stringify([...next]));}catch{}
+  };
 
   useEffect(()=>{
     supabase.from("notifications").select("*").order("created_at",{ascending:false}).limit(30)
@@ -1844,7 +1857,8 @@ function NotifBell({currentUser,setCurrentUser,setTab}) {
     return ()=>supabase.removeChannel(ch);
   },[]);
 
-  const unread = notifs.filter(n=>
+  const visibles = notifs.filter(n=>!dismissed.has(n.id));
+  const unread = visibles.filter(n=>
     !currentUser?.notifs_vues_at||new Date(n.created_at)>new Date(currentUser.notifs_vues_at)
   ).length;
 
@@ -1869,8 +1883,8 @@ function NotifBell({currentUser,setCurrentUser,setTab}) {
           <div style={{position:"fixed",top:64,right:8,left:8,maxWidth:420,margin:"0 auto",zIndex:150,background:C.blanc,borderRadius:16,boxShadow:"0 8px 32px rgba(26,31,110,0.18)",overflow:"hidden",maxHeight:"60vh",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 16px",borderBottom:"1px solid #E8E0D0",fontFamily:"'Playfair Display',serif",fontWeight:700,color:C.primary,fontSize:15}}>Notifications</div>
             <div style={{overflowY:"auto",flex:1}}>
-              {notifs.length===0&&<div style={{padding:"24px",textAlign:"center",color:C.grisChaud,fontSize:13}}>Aucune notification</div>}
-              {notifs.map(n=>{
+              {visibles.length===0&&<div style={{padding:"24px",textAlign:"center",color:C.grisChaud,fontSize:13}}>Aucune notification</div>}
+              {visibles.map(n=>{
                 const dest = NOTIF_TAB[n.type];
                 return (
                   <div key={n.id} onClick={()=>{if(dest){setTab(dest);setOpen(false);}}} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",borderBottom:"1px solid #F0EAE0",cursor:dest?"pointer":"default",background:"transparent",transition:"background 0.15s"}}
@@ -1881,7 +1895,7 @@ function NotifBell({currentUser,setCurrentUser,setTab}) {
                       <div style={{fontSize:13,color:C.primary,lineHeight:1.4}}>{n.titre}</div>
                       <div style={{fontSize:11,color:C.grisChaud,marginTop:3}}>{timeAgo(n.created_at)}</div>
                     </div>
-                    {dest&&<div style={{fontSize:12,color:C.grisChaud,alignSelf:"center"}}>→</div>}
+                    <button onClick={e=>dismiss(e,n.id)} title="Supprimer" style={{background:"none",border:"none",cursor:"pointer",color:C.grisChaud,fontSize:16,padding:"0 4px",alignSelf:"center",lineHeight:1}}>×</button>
                   </div>
                 );
               })}
