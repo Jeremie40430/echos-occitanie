@@ -91,29 +91,13 @@ const Confirm = ({msg,onConfirm,onClose}) => (
 );
 
 function ConfirmEvenement({ev,onConfirm,onClose}) {
-  const [saisie,setSaisie] = useState("");
-  const nom = ev.titre||ev.type||"";
-  const ok = saisie.trim().toLowerCase()===nom.toLowerCase();
+  const nom = ev.titre||ev.type||"cet événement";
   return (
-    <Modal title="⚠️ Confirmer la suppression" onClose={onClose}>
-      <div style={{background:"#FFF3CD",border:"1px solid #FDE68A",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-        <div style={{fontSize:13,color:"#92400E",fontWeight:600,marginBottom:4}}>Attention — cette action est irréversible</div>
-        <div style={{fontSize:12,color:"#92400E"}}>Toutes les inscriptions liées à cet événement seront perdues.</div>
+    <Modal title="Confirmer la suppression" onClose={onClose}>
+      <div style={{fontSize:14,color:C.primary,marginBottom:20,lineHeight:1.5}}>
+        Voulez-vous vraiment supprimer <strong>"{nom}"</strong> ?
       </div>
-      <div style={{fontSize:13,color:C.primary,marginBottom:8}}>
-        Pour confirmer, tapez le nom de l'événement :<br/>
-        <strong style={{color:C.secondary}}>"{nom}"</strong>
-      </div>
-      <input
-        style={{...S.input,borderColor:saisie&&!ok?"#EF4444":saisie&&ok?"#22C55E":"#D4C9B0"}}
-        value={saisie}
-        onChange={e=>setSaisie(e.target.value)}
-        placeholder={nom}
-        autoFocus
-      />
-      <button style={{...S.btnD,opacity:ok?1:0.4,cursor:ok?"pointer":"not-allowed"}} disabled={!ok} onClick={onConfirm}>
-        Supprimer définitivement
-      </button>
+      <button style={S.btnD} onClick={onConfirm}>Oui, supprimer</button>
       <button style={S.btnS} onClick={onClose}>Annuler</button>
     </Modal>
   );
