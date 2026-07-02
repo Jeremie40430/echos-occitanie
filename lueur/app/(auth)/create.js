@@ -33,11 +33,13 @@ export default function CreateScreen() {
     try {
       if (mode === 'signup') {
         await signUp(email, pwd);
-        // Inscription réussie → on va au profil
         router.push('/(auth)/profile-setup');
       } else {
         await signIn(email, pwd);
-        // Connexion réussie → AuthContext redirige automatiquement vers (tabs)
+        // AuthContext ne fait la redirection auto que depuis welcome — ici on
+        // pousse à la main pour éviter que l'utilisatrice reste bloquée sur
+        // l'écran de connexion.
+        router.replace('/(tabs)/');
       }
     } catch (error) {
       const msg = error.message || '';
