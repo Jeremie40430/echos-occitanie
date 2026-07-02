@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { ALL_SYMPTOMS } from '../../lib/symptoms';
 import { getRecentEntries } from '../../lib/db';
+import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { today, lastNDays, dayNum, fromKey } from '../../lib/dateUtils';
 import { colors, spacing, radius, shade, LEVELS } from '../../lib/theme';
@@ -100,22 +101,28 @@ function AiSummary({ days, data }) {
 
   const generate = async () => {
     setLoading(true);
-    const lines = days.map(d => {
-      const e = data[d] || {};
-      const parts = ALL_SYMPTOMS.filter(s => e[s.key] > 0).map(s => `${s.label} (${LEVELS[e[s.key]]})`).join(', ');
-      const sd = fromKey(d).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
-      return parts ? `${sd} : ${parts}` : `${sd} : aucun symptôme notable`;
-    });
-    const prompt = `Voici les symptômes de ménopause notés par une femme sur les 7 derniers jours :\n\n${lines.join('\n')}\n\nRédige un résumé bienveillant de 3 à 4 phrases, en français, à la deuxième personne du pluriel (vouvoiement). Ce résumé doit :\n1. Identifier les symptômes les plus fréquents ou intenses\n2. Relever une tendance positive si elle existe\n3. Proposer 1-2 points concrets à mentionner au médecin\nTon : chaleureux, factuel, jamais alarmiste. Ne pas faire de diagnostic.`;
+    // On envoie uniquement les données brutes (jour + symptômes actifs).
+    // Le prompt est construit côté serveur, la clé API Anthropic ne quitte
+    // jamais Supabase.
+    const payload = {
+      days: days.map((d) => {
+        const e = data[d] || {};
+        const symptoms = {};
+        for (const s of ALL_SYMPTOMS) {
+          if (e[s.key] > 0) symptoms[s.key] = e[s.key];
+        }
+        return { day: d, symptoms };
+      }),
+    };
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }),
+      const { data: resp, error } = await supabase.functions.invoke('claude-summary', {
+        body: payload,
       });
-      const json = await res.json();
-      setSummary(json.content?.[0]?.text || 'Impossible de générer le résumé.');
-    } catch { setSummary('Une erreur est survenue. Réessayez dans un instant.'); }
+      if (error) throw error;
+      setSummary(resp?.summary || 'Impossible de générer le résumé.');
+    } catch (e) {
+      setSummary('Une erreur est survenue. Réessayez dans un instant.');
+    }
     setLoading(false);
   };
 
