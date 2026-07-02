@@ -82,6 +82,8 @@ const s = StyleSheet.create({
     borderColor: colors.line,
   },
   dotSelected: {
+    borderWidth: 2.5,
+    borderColor: colors.ink,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 4,
