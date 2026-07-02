@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Lueur",
+    "slug": "lueur",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "lueur",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#FAF6F1"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lueur.app"
+    },
+    "android": {
+      "package": "com.lueur.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF6F1"
+      }
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
