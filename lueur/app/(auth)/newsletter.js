@@ -3,10 +3,10 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Toggle, Btn } from '../../components/UI';
-import { saveProfile, getProfile } from '../../lib/db';
+import { saveProfile } from '../../lib/db';
 import { runSync } from '../../lib/sync';
 import { useAuth } from '../../context/AuthContext';
-import { colors, spacing } from '../../lib/theme';
+import { colors } from '../../lib/theme';
 
 function StepBar() {
   return (
@@ -29,17 +29,7 @@ export default function NewsletterScreen() {
     if (!cgu || loading || !user?.id) return;
     setLoading(true);
     try {
-      // Fusionne le choix newsletter avec le profil déjà saisi.
-      const current = await getProfile(user.id);
-      await saveProfile(user.id, {
-        firstName: current?.first_name || '',
-        lastName: current?.last_name || '',
-        dob: current?.dob || '',
-        phone: current?.phone || '',
-        zip: current?.zip || '',
-        city: current?.city || '',
-        newsletter: nl,
-      });
+      await saveProfile(user.id, { newsletter: nl });
       runSync(user.id);
     } catch (e) {
       // Non bloquant : on continue vers l'app.

@@ -1,11 +1,10 @@
-// Contexte d'authentification : expose la session Supabase à toute l'app
-// et redirige entre l'onboarding et les onglets selon l'état de connexion.
+// Contexte d'authentification : expose la session Supabase à toute l'app.
 //
-// Règle de redirection :
-//   - Personne connectée + hors /(auth) → renvoi vers /(auth)/welcome.
-//   - Connectée + sur /(auth)/welcome    → renvoi vers /(tabs)/.
-//   - Connectée + sur les autres écrans /(auth) (création, profil, newsletter)
-//     → on laisse l'utilisatrice terminer son onboarding manuellement.
+// Règles de routage :
+//   • Personne connectée + hors /(auth) → renvoi vers /(auth)/welcome.
+//   • Connectée + sur /(auth)/welcome    → renvoi vers /(tabs)/.
+//   • Connectée + sur create / profile-setup / newsletter → on laisse
+//     l'utilisatrice terminer son onboarding manuellement.
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';

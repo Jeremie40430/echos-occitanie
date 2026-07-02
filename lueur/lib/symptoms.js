@@ -1,65 +1,32 @@
-// La liste des symptômes que l'app suit.
-// Chaque symptôme a une couleur sémantique : la chaleur tire vers l'argile chaud,
-// le sommeil vers l'indigo, etc. Cette couleur servira aussi plus tard dans le
-// calendrier (vue Historique) et les graphiques (vue Tendances).
-//
-// Le champ `premium` prépare le modèle freemium : à terme, les symptômes
-// premium seront verrouillés derrière l'abonnement. Pour l'instant tout est
-// ouvert pour qu'on puisse développer tranquillement.
-//
-// Les icônes viennent d'Ionicons, déjà inclus dans Expo (aucune dépendance à ajouter).
+// Symptômes de ménopause, regroupés par thème.
+// Tous formulés comme des GÊNES : plus le niveau est élevé, plus ça va mal.
+// Cohérence home ↔ historique ↔ tendances garantie.
 
-export const SYMPTOMS = [
+export const GROUPS = [
   {
-    key: 'hot_flashes',
-    label: 'Bouffées de chaleur',
-    icon: 'flame-outline',
-    color: '#C77B5A',     // argile chaud
-    premium: false,
+    title: 'Le corps',
+    items: [
+      { key: 'hot_flashes',   label: 'Bouffées de chaleur', icon: 'flame-outline',        color: '#C77B5A' },
+      { key: 'sleep_trouble', label: 'Troubles du sommeil', icon: 'moon-outline',          color: '#5B6B8C' },
+      { key: 'fatigue',       label: 'Fatigue',             icon: 'battery-half-outline',  color: '#C9A24B' },
+    ],
   },
   {
-    key: 'sleep',
-    label: 'Sommeil',
-    icon: 'moon-outline',
-    color: '#5B6B8C',     // indigo doux
-    premium: false,
+    title: 'La tête et les émotions',
+    items: [
+      { key: 'mood_swings',   label: "Sautes d'humeur",    icon: 'partly-sunny-outline',  color: '#7A5878' },
+      { key: 'anxiety',       label: 'Anxiété',            icon: 'pulse-outline',         color: '#6E8B73' },
+      { key: 'brain_fog',     label: 'Brouillard mental',  icon: 'cloud-outline',         color: '#7E8AA2' },
+    ],
   },
   {
-    key: 'mood',
-    label: 'Humeur',
-    icon: 'partly-sunny-outline',
-    color: '#7A5878',     // prune
-    premium: false,
-  },
-  {
-    key: 'energy',
-    label: 'Énergie',
-    icon: 'battery-half-outline',
-    color: '#C9A24B',     // doré sourd
-    premium: false,
-  },
-  {
-    key: 'intimacy_comfort',
-    label: 'Confort intime',
-    icon: 'water-outline',
-    color: '#B96A7E',     // rose-prune
-    premium: false,
-  },
-  {
-    key: 'libido',
-    label: 'Libido',
-    icon: 'heart-outline',
-    color: '#A04E6B',     // magenta sourd
-    premium: true,        // exemple de symptôme réservé au premium
-  },
-  {
-    key: 'anxiety',
-    label: 'Anxiété',
-    icon: 'pulse-outline',
-    color: '#6E8B73',     // sauge
-    premium: true,
+    title: "L'intime",
+    items: [
+      { key: 'dryness',       label: 'Sécheresse intime',  icon: 'water-outline',         color: '#B96A7E' },
+      { key: 'low_libido',    label: 'Baisse de libido',   icon: 'heart-outline',         color: '#A04E6B' },
+    ],
   },
 ];
 
-// Petit utilitaire pour retrouver un symptôme par sa clé.
-export const symptomByKey = (key) => SYMPTOMS.find((s) => s.key === key);
+// Liste à plat pour les boucles.
+export const ALL_SYMPTOMS = GROUPS.flatMap(g => g.items);

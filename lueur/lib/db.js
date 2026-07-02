@@ -1,101 +1,100 @@
-// Base SQLite locale (expo-sqlite).
-// Elle est la source de vérité pour la saisie : l'écriture est instantanée et
-// marche hors-ligne. La couche `sync.js` s'occupe ensuite de pousser vers
-// Supabase (best-effort) et de tirer les changements des autres appareils.
+// Base SQLite locale — source de vérité pour l'UI (écriture instantanée,
+// marche hors-ligne). La couche `sync.js` pousse ensuite les lignes "dirty"
+// (synced_at IS NULL) vers Supabase et tire les changements plus récents des
+// autres appareils.
 //
-// Chaque entrée porte un `user_id` (l'utilisatrice connectée) et un
-// `synced_at`. Si `synced_at` est NULL, c'est une écriture qui n'a pas encore
-// été confirmée par le serveur — la couche sync la ressaie plus tard.
+// Toutes les tables sont scopées par `user_id` : chaque utilisatrice ne voit
+// que ses données, et un changement de compte sur le même téléphone ne fuit
+// pas les données d'une session à l'autre.
 
 import * as SQLite from 'expo-sqlite';
 
+const SCHEMA_VERSION = 2;
 let dbPromise = null;
 
 function getDb() {
-  if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync('lueur.db');
-  }
+  if (!dbPromise) dbPromise = SQLite.openDatabaseAsync('lueur.db');
   return dbPromise;
+}
+
+function now() {
+  return new Date().toISOString();
 }
 
 export async function initDb() {
   const db = await getDb();
+  const row = await db.getFirstAsync(`PRAGMA user_version;`);
+  const current = row?.user_version ?? 0;
+
+  if (current < SCHEMA_VERSION) {
+    // Migration destructive : le schéma évolue (ajout de user_id + synced_at),
+    // on repart d'un état propre. Sans données de production à préserver
+    // aujourd'hui, c'est le chemin le plus sûr.
+    await db.execAsync(`
+      DROP TABLE IF EXISTS entries;
+      DROP TABLE IF EXISTS notes;
+      DROP TABLE IF EXISTS profile;
+    `);
+  }
+
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
     CREATE TABLE IF NOT EXISTS entries (
-      id           TEXT PRIMARY KEY,        -- uuid généré localement
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id      TEXT NOT NULL,
-      day          TEXT NOT NULL,           -- AAAA-MM-JJ
+      day          TEXT NOT NULL,
       symptom_key  TEXT NOT NULL,
-      intensity    INTEGER NOT NULL,        -- 0..3
-      updated_at   TEXT NOT NULL,           -- ISO 8601 UTC
-      synced_at    TEXT,                    -- NULL = à pousser
+      intensity    INTEGER NOT NULL DEFAULT 0,
+      updated_at   TEXT NOT NULL,
+      synced_at    TEXT,
       UNIQUE(user_id, day, symptom_key)
     );
-
     CREATE INDEX IF NOT EXISTS idx_entries_dirty
       ON entries(user_id) WHERE synced_at IS NULL;
 
-    CREATE TABLE IF NOT EXISTS profile (
-      user_id      TEXT PRIMARY KEY,
-      first_name   TEXT DEFAULT '',
-      last_name    TEXT DEFAULT '',
-      dob          TEXT DEFAULT '',
-      phone        TEXT DEFAULT '',
-      zip          TEXT DEFAULT '',
-      city         TEXT DEFAULT '',
-      newsletter   INTEGER DEFAULT 1,
+    CREATE TABLE IF NOT EXISTS notes (
+      user_id      TEXT NOT NULL,
+      day          TEXT NOT NULL,
+      note         TEXT NOT NULL DEFAULT '',
       updated_at   TEXT NOT NULL,
-      synced_at    TEXT
+      synced_at    TEXT,
+      PRIMARY KEY (user_id, day)
     );
+
+    CREATE TABLE IF NOT EXISTS profile (
+      user_id      TEXT NOT NULL,
+      key          TEXT NOT NULL,
+      value        TEXT NOT NULL DEFAULT '',
+      updated_at   TEXT NOT NULL,
+      synced_at    TEXT,
+      PRIMARY KEY (user_id, key)
+    );
+
+    PRAGMA user_version = ${SCHEMA_VERSION};
   `);
 }
 
-export function today() {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
+// ─── Symptômes ────────────────────────────────────────────────────────────
 
-// UUID v4 court, sans dépendance.
-function uuid() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-// ─── Entrées quotidiennes ─────────────────────────────────────────────────
-
-// Enregistre l'intensité d'un symptôme pour l'utilisatrice et le jour donnés.
-// Renvoie l'entrée locale mise à jour (utile pour déclencher un push immédiat).
+// Écrit ou met à jour l'intensité d'un symptôme. Sans user, no-op silencieux
+// (évite d'écrire "orphelin" pendant les micro-latences de l'auth au boot).
 export async function setIntensity(userId, day, symptomKey, intensity) {
+  if (!userId) return;
   const db = await getDb();
-  const now = new Date().toISOString();
-  const existing = await db.getFirstAsync(
-    `SELECT id FROM entries WHERE user_id = ? AND day = ? AND symptom_key = ?;`,
-    [userId, day, symptomKey]
-  );
-  if (existing) {
-    await db.runAsync(
-      `UPDATE entries SET intensity = ?, updated_at = ?, synced_at = NULL WHERE id = ?;`,
-      [intensity, now, existing.id]
-    );
-    return { id: existing.id, user_id: userId, day, symptom_key: symptomKey, intensity, updated_at: now };
-  }
-  const id = uuid();
   await db.runAsync(
-    `INSERT INTO entries (id, user_id, day, symptom_key, intensity, updated_at, synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL);`,
-    [id, userId, day, symptomKey, intensity, now]
+    `INSERT INTO entries (user_id, day, symptom_key, intensity, updated_at, synced_at)
+     VALUES (?, ?, ?, ?, ?, NULL)
+     ON CONFLICT(user_id, day, symptom_key)
+     DO UPDATE SET intensity = excluded.intensity,
+                   updated_at = excluded.updated_at,
+                   synced_at = NULL;`,
+    [userId, day, symptomKey, intensity, now()]
   );
-  return { id, user_id: userId, day, symptom_key: symptomKey, intensity, updated_at: now };
 }
 
 export async function getDay(userId, day) {
+  if (!userId) return {};
   const db = await getDb();
   const rows = await db.getAllAsync(
     `SELECT symptom_key, intensity FROM entries WHERE user_id = ? AND day = ?;`,
@@ -106,22 +105,81 @@ export async function getDay(userId, day) {
   return result;
 }
 
-export async function getRecent(userId, days = 30) {
+export async function getRecentEntries(userId, days = 7) {
+  if (!userId) return [];
   const db = await getDb();
   return db.getAllAsync(
     `SELECT day, symptom_key, intensity FROM entries
      WHERE user_id = ?
      ORDER BY day DESC LIMIT ?;`,
-    [userId, days * 12]
+    [userId, days * 10]
   );
+}
+
+// ─── Notes ────────────────────────────────────────────────────────────────
+
+export async function setNote(userId, day, note) {
+  if (!userId) return;
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO notes (user_id, day, note, updated_at, synced_at)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT(user_id, day)
+     DO UPDATE SET note = excluded.note,
+                   updated_at = excluded.updated_at,
+                   synced_at = NULL;`,
+    [userId, day, note, now()]
+  );
+}
+
+export async function getNote(userId, day) {
+  if (!userId) return '';
+  const db = await getDb();
+  const row = await db.getFirstAsync(
+    `SELECT note FROM notes WHERE user_id = ? AND day = ?;`,
+    [userId, day]
+  );
+  return row ? row.note : '';
+}
+
+// ─── Profil (clef/valeur libre) ───────────────────────────────────────────
+
+export async function saveProfile(userId, data) {
+  if (!userId) return;
+  const db = await getDb();
+  const ts = now();
+  for (const [key, value] of Object.entries(data)) {
+    await db.runAsync(
+      `INSERT INTO profile (user_id, key, value, updated_at, synced_at)
+       VALUES (?, ?, ?, ?, NULL)
+       ON CONFLICT(user_id, key)
+       DO UPDATE SET value = excluded.value,
+                     updated_at = excluded.updated_at,
+                     synced_at = NULL;`,
+      [userId, key, String(value), ts]
+    );
+  }
+}
+
+export async function getProfile(userId) {
+  if (!userId) return {};
+  const db = await getDb();
+  const rows = await db.getAllAsync(
+    `SELECT key, value FROM profile WHERE user_id = ?;`,
+    [userId]
+  );
+  const result = {};
+  for (const row of rows) result[row.key] = row.value;
+  return result;
 }
 
 // ─── Support de la couche sync ────────────────────────────────────────────
 
 export async function getDirtyEntries(userId, limit = 200) {
+  if (!userId) return [];
   const db = await getDb();
   return db.getAllAsync(
-    `SELECT id, user_id, day, symptom_key, intensity, updated_at
+    `SELECT user_id, day, symptom_key, intensity, updated_at
      FROM entries
      WHERE user_id = ? AND synced_at IS NULL
      LIMIT ?;`,
@@ -129,98 +187,146 @@ export async function getDirtyEntries(userId, limit = 200) {
   );
 }
 
-export async function markEntrySynced(id, syncedAt) {
+export async function markEntrySynced(userId, day, symptomKey, syncedAt) {
   const db = await getDb();
   await db.runAsync(
-    `UPDATE entries SET synced_at = ? WHERE id = ? AND synced_at IS NULL;`,
-    [syncedAt, id]
+    `UPDATE entries SET synced_at = ?
+     WHERE user_id = ? AND day = ? AND symptom_key = ? AND synced_at IS NULL;`,
+    [syncedAt, userId, day, symptomKey]
   );
 }
 
-// Applique une entrée reçue du serveur. Last-Write-Wins sur updated_at.
-// N'écrase pas une écriture locale plus récente non encore synchronisée.
 export async function upsertRemoteEntry(remote) {
   const db = await getDb();
   const existing = await db.getFirstAsync(
-    `SELECT id, updated_at, synced_at FROM entries
+    `SELECT updated_at, synced_at FROM entries
      WHERE user_id = ? AND day = ? AND symptom_key = ?;`,
     [remote.user_id, remote.day, remote.symptom_key]
   );
   if (existing) {
+    // Si un dirty local est plus récent, on ne l'écrase pas.
     if (existing.synced_at === null && existing.updated_at > remote.updated_at) return;
     await db.runAsync(
-      `UPDATE entries SET intensity = ?, updated_at = ?, synced_at = ? WHERE id = ?;`,
-      [remote.intensity, remote.updated_at, remote.updated_at, existing.id]
+      `UPDATE entries SET intensity = ?, updated_at = ?, synced_at = ?
+       WHERE user_id = ? AND day = ? AND symptom_key = ?;`,
+      [remote.intensity, remote.updated_at, remote.updated_at, remote.user_id, remote.day, remote.symptom_key]
     );
     return;
   }
   await db.runAsync(
-    `INSERT INTO entries (id, user_id, day, symptom_key, intensity, updated_at, synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?);`,
-    [remote.id || uuid(), remote.user_id, remote.day, remote.symptom_key, remote.intensity, remote.updated_at, remote.updated_at]
+    `INSERT INTO entries (user_id, day, symptom_key, intensity, updated_at, synced_at)
+     VALUES (?, ?, ?, ?, ?, ?);`,
+    [remote.user_id, remote.day, remote.symptom_key, remote.intensity, remote.updated_at, remote.updated_at]
   );
 }
 
 export async function getMaxEntryUpdatedAt(userId) {
+  if (!userId) return null;
   const db = await getDb();
   const row = await db.getFirstAsync(
-    `SELECT MAX(updated_at) AS max_at FROM entries WHERE user_id = ? AND synced_at IS NOT NULL;`,
+    `SELECT MAX(updated_at) AS max_at FROM entries
+     WHERE user_id = ? AND synced_at IS NOT NULL;`,
     [userId]
   );
   return row?.max_at || null;
 }
 
-// ─── Profil ───────────────────────────────────────────────────────────────
-
-export async function saveProfile(userId, fields) {
+export async function getDirtyNotes(userId, limit = 200) {
+  if (!userId) return [];
   const db = await getDb();
-  const now = new Date().toISOString();
-  const existing = await db.getFirstAsync(
-    `SELECT user_id FROM profile WHERE user_id = ?;`,
-    [userId]
+  return db.getAllAsync(
+    `SELECT user_id, day, note, updated_at
+     FROM notes
+     WHERE user_id = ? AND synced_at IS NULL
+     LIMIT ?;`,
+    [userId, limit]
   );
-  const values = {
-    first_name: fields.firstName ?? '',
-    last_name: fields.lastName ?? '',
-    dob: fields.dob ?? '',
-    phone: fields.phone ?? '',
-    zip: fields.zip ?? '',
-    city: fields.city ?? '',
-    newsletter: fields.newsletter === false ? 0 : 1,
-  };
-  if (existing) {
-    await db.runAsync(
-      `UPDATE profile SET first_name = ?, last_name = ?, dob = ?, phone = ?, zip = ?, city = ?, newsletter = ?, updated_at = ?, synced_at = NULL
-       WHERE user_id = ?;`,
-      [values.first_name, values.last_name, values.dob, values.phone, values.zip, values.city, values.newsletter, now, userId]
-    );
-  } else {
-    await db.runAsync(
-      `INSERT INTO profile (user_id, first_name, last_name, dob, phone, zip, city, newsletter, updated_at, synced_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
-      [userId, values.first_name, values.last_name, values.dob, values.phone, values.zip, values.city, values.newsletter, now]
-    );
-  }
-  return { ...values, updated_at: now };
 }
 
-export async function getProfile(userId) {
+export async function markNoteSynced(userId, day, syncedAt) {
   const db = await getDb();
-  return db.getFirstAsync(`SELECT * FROM profile WHERE user_id = ?;`, [userId]);
+  await db.runAsync(
+    `UPDATE notes SET synced_at = ?
+     WHERE user_id = ? AND day = ? AND synced_at IS NULL;`,
+    [syncedAt, userId, day]
+  );
+}
+
+export async function upsertRemoteNote(remote) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(
+    `SELECT updated_at, synced_at FROM notes WHERE user_id = ? AND day = ?;`,
+    [remote.user_id, remote.day]
+  );
+  if (existing) {
+    if (existing.synced_at === null && existing.updated_at > remote.updated_at) return;
+    await db.runAsync(
+      `UPDATE notes SET note = ?, updated_at = ?, synced_at = ?
+       WHERE user_id = ? AND day = ?;`,
+      [remote.note, remote.updated_at, remote.updated_at, remote.user_id, remote.day]
+    );
+    return;
+  }
+  await db.runAsync(
+    `INSERT INTO notes (user_id, day, note, updated_at, synced_at)
+     VALUES (?, ?, ?, ?, ?);`,
+    [remote.user_id, remote.day, remote.note, remote.updated_at, remote.updated_at]
+  );
+}
+
+export async function getMaxNoteUpdatedAt(userId) {
+  if (!userId) return null;
+  const db = await getDb();
+  const row = await db.getFirstAsync(
+    `SELECT MAX(updated_at) AS max_at FROM notes
+     WHERE user_id = ? AND synced_at IS NOT NULL;`,
+    [userId]
+  );
+  return row?.max_at || null;
+}
+
+export async function hasDirtyProfile(userId) {
+  if (!userId) return false;
+  const db = await getDb();
+  const row = await db.getFirstAsync(
+    `SELECT COUNT(*) AS n FROM profile WHERE user_id = ? AND synced_at IS NULL;`,
+    [userId]
+  );
+  return (row?.n ?? 0) > 0;
+}
+
+export async function getProfileMaxUpdatedAt(userId) {
+  if (!userId) return null;
+  const db = await getDb();
+  const row = await db.getFirstAsync(
+    `SELECT MAX(updated_at) AS max_at FROM profile WHERE user_id = ?;`,
+    [userId]
+  );
+  return row?.max_at || null;
 }
 
 export async function markProfileSynced(userId, syncedAt) {
   const db = await getDb();
   await db.runAsync(
-    `UPDATE profile SET synced_at = ? WHERE user_id = ? AND synced_at IS NULL;`,
+    `UPDATE profile SET synced_at = ?
+     WHERE user_id = ? AND synced_at IS NULL;`,
     [syncedAt, userId]
   );
 }
 
-export async function getDirtyProfile(userId) {
+// Remplace le profil local par la version serveur (utilisé par la sync pull).
+export async function replaceLocalProfile(userId, data, updatedAt) {
+  if (!userId) return;
   const db = await getDb();
-  return db.getFirstAsync(
-    `SELECT * FROM profile WHERE user_id = ? AND synced_at IS NULL;`,
-    [userId]
-  );
+  for (const [key, value] of Object.entries(data)) {
+    await db.runAsync(
+      `INSERT INTO profile (user_id, key, value, updated_at, synced_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, key)
+       DO UPDATE SET value = excluded.value,
+                     updated_at = excluded.updated_at,
+                     synced_at = excluded.updated_at;`,
+      [userId, key, String(value ?? ''), updatedAt, updatedAt]
+    );
+  }
 }

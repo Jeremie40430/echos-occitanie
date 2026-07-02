@@ -1,17 +1,14 @@
-// Layout racine.
-// 1) Initialise la base locale au lancement.
-// 2) Enveloppe toute l'app dans AuthProvider (session Supabase + redirections).
-// 3) Déclenche une sync quand l'app revient au premier plan.
-
 import { useEffect, useState } from 'react';
-import { Slot } from 'expo-router';
 import { View, ActivityIndicator, AppState } from 'react-native';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { initDb } from '../lib/db';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { runSync } from '../lib/sync';
 import { colors } from '../lib/theme';
 
+// Composant interne : a accès à `useAuth()` (qui doit être *dans* AuthProvider)
+// et déclenche la sync au changement d'utilisatrice + au retour au foreground.
 function AppShell() {
   const { user } = useAuth();
 
@@ -26,7 +23,15 @@ function AppShell() {
     return () => sub.remove();
   }, [user?.id]);
 
-  return <Slot />;
+  return (
+    <>
+      <StatusBar style="dark" />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </>
+  );
 }
 
 export default function RootLayout() {
@@ -38,25 +43,15 @@ export default function RootLayout() {
 
   if (!ready) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: colors.bg,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={colors.plum} />
       </View>
     );
   }
 
   return (
-    <>
-      <StatusBar style="dark" />
-      <AuthProvider>
-        <AppShell />
-      </AuthProvider>
-    </>
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }
