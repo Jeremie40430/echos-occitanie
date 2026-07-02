@@ -35,7 +35,10 @@ export default function SymptomCard({ symptom, value = 0, onChange }) {
               accessibilityLabel={`${symptom.label} : ${levels[level]}`}
               style={[
                 styles.dot,
-                { backgroundColor: active ? symptom.color : colors.empty },
+                {
+                  backgroundColor: active ? symptom.color : colors.empty,
+                  borderColor: active ? colors.ink : 'transparent',
+                },
               ]}
             />
           );
@@ -82,6 +85,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
+    borderWidth: 2,
   },
   levelText: {
     marginLeft: spacing.xs,
