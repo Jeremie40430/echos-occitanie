@@ -12,16 +12,24 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lueur.app"
+      "bundleIdentifier": "com.lueur.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.lueur.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#FAF6F1"
       }
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "TO_FILL_AFTER_EAS_INIT"
+      }
+    },
+    "owner": "TO_FILL_YOUR_EXPO_USERNAME"
   }
 }
